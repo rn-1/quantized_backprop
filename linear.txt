@@ -1,0 +1,26 @@
+===BASELINE===
+
+Total time taken: 0.08285832405090332 seconds.
+tensor([[5., 5., 5., 5.]], device='cuda:0', dtype=torch.float64,
+       grad_fn=<AddmmBackward0>)
+===FP===
+
+int_tensor tensor([[65664, 65664, 65664, 65664]], device='cuda:0')
+int_tensor with r: tensor([[ 88002617174720640,  28529298788909184,  53300990820024448,
+         126580511643598976]], device='cuda:0')
+int_tensor with trunc: tensor([[687520446677505, 222885146788353, 416413990781441, 988910247215617]],
+       device='cuda:0')
+int_tensor with trunc and correction: tensor([[513, 513, 513, 513]], device='cuda:0')
+final tensor: tensor([[4.0078, 4.0078, 4.0078, 4.0078]], device='cuda:0',
+       dtype=torch.float64)
+tensor([[4.0078, 4.0078, 4.0078, 4.0078]], device='cuda:0',
+       dtype=torch.float64)
+Total time taken: 0.048148155212402344 seconds.
+tensor([[4.0078, 4.0078, 4.0078, 4.0078]], device='cuda:0',
+       dtype=torch.float64, grad_fn=<LinearQBackward>)
+Diff avg:
+ 0.9921875
+Diff max:
+ 0.9921875
+Diff stdev:
+ 0.0
