@@ -15,6 +15,42 @@ from tqdm import tqdm
 
 BITs = 22
 
+# --- MPC op-count instrumentation ---------------------------------------------------------
+# Wall-clock of this simulator is NOT a cost proxy for a real secure-MPC deployment (it runs
+# locally with no communication). What DOES track MPC cost is the count of operations whose
+# secure realisation is dominated by interactive communication:
+#   * probabilistic truncations  -- one per fixed-point multiply group; the core online-round cost
+#   * inverse-sqrt approximations -- nonlinear, needs bit-decomposition (BatchNorm)
+#   * ReLU comparisons (DReLU)    -- one sign bit per element (computed in fwd, reused in bwd)
+# 'calls' counts SIMD invocations (a tensor truncated in one shot ~ one round's worth of work,
+# though true round count depends on the data-dependency graph); 'elems' counts total elements
+# ~ bandwidth. Counting is always-on and negligibly cheap; snapshot around fwd/bwd to split.
+OP_COUNTS = {
+    'p_truncate_calls': 0, 'p_truncate_elems': 0,
+    'inv_sqrt_calls':   0, 'inv_sqrt_elems':   0,
+    'relu_calls':       0, 'relu_elems':       0,
+}
+
+def reset_op_counts():
+    for key in OP_COUNTS:
+        OP_COUNTS[key] = 0
+
+def snapshot_op_counts():
+    return dict(OP_COUNTS)
+
+def attach_relu_counter(model):
+    # ReLU is an nn.Module here, so count its comparisons with a forward hook. The sign bit is
+    # computed once in the forward pass and reused in backward (no new comparison), so counting
+    # forward invocations is the correct MPC round cost. Returns the hook handles.
+    handles = []
+    for module in model.modules():
+        if isinstance(module, nn.ReLU):
+            def hook(mod, inp, out):
+                OP_COUNTS['relu_calls'] += 1
+                OP_COUNTS['relu_elems'] += out.numel()
+            handles.append(module.register_forward_hook(hook))
+    return handles
+
 # TODO
 # Conv2d needs float --> int to float then calculate, bc it doesnt change should be fine.
 # everything else should be in form of integers with last 7 bits for decimal interpretation.
@@ -80,6 +116,8 @@ def pseudosep(x):
 def inverse_sqrt(x):
     # adapted from lu et al
     # assume that x is an fp number
+    OP_COUNTS['inv_sqrt_calls'] += 1
+    OP_COUNTS['inv_sqrt_elems'] += x.numel()
     a, = to_fixed(torch.tensor([4.63887], dtype=torch.float64, device = x.device))
     b, = to_fixed(torch.tensor([5.77789], dtype=torch.float64, device = x.device))
     c, = to_fixed(torch.tensor([3.14736], dtype=torch.float64, device = x.device))
@@ -305,6 +343,9 @@ def p_truncate(*tensors):
     for tensor in tensors:
 
         assert tensor.dtype == torch.int64, "p_truncation only works on integer tensors"
+
+        OP_COUNTS['p_truncate_calls'] += 1
+        OP_COUNTS['p_truncate_elems'] += tensor.numel()
 
         # the simulated dtype is a 57-bit ring, but to_fixed hands us a signed int64, which is
         # not a ring element: a negative value carries bits 57..63 set. carry below then reads
@@ -635,8 +676,9 @@ class BatchNorm2dQ(torch.autograd.Function):
             # into running_var, so the two have to be tracked separately.
             variance = x.var(stats_dimensions, unbiased=False)# these don't need expansion.
             variance, = to_fixed(*p_truncate(*to_fixed_no_shift(variance)))
-            # torch's 1e-5 eps rounds to 0 at BITs=7, so clamp to the smallest positive
-            # fixed-point value instead: pseudosep takes log2(variance) and needs it > 0.
+            # torch's 1e-5 eps rounds to 0 whenever eps < 2**-BITs (true for all small BITs),
+            # so clamp to the smallest positive fixed-point value instead: pseudosep takes
+            # log2(variance) and needs it > 0.
             variance = torch.clamp(variance, min=1)
 
             variance_unbiased = x.var(stats_dimensions, unbiased=True)
@@ -682,7 +724,7 @@ class BatchNorm2dQ(torch.autograd.Function):
             gt_x, = to_float(x)
             gt_var = gt_x.var(stats_dimensions, unbiased=True)
             gt_inv_var = 1 / torch.sqrt(gt_var.to(torch.float64) + 1e-6)
-            print("expected inv_var:",gt_inv_var)
+            # print("expected inv_var:",gt_inv_var)
             # inv_var, = to_fixed(*p_truncate(inv_var)) # small number correction
             # compute inverse variance:
         #     if torch.is_tensor(variance):
@@ -713,9 +755,9 @@ class BatchNorm2dQ(torch.autograd.Function):
         # print(mean)
         # print(inv_var)
         x_norm, = p_truncate(x_norm)
-        print("x_norm",x_norm)
-        print("expected x_norm:", gt_x_norm)
-        report_error("x_norm", x_norm, gt_x_norm)
+        # print("x_norm",x_norm)
+        # print("expected x_norm:", gt_x_norm)
+        # report_error("x_norm", x_norm, gt_x_norm)
 
         # print("gt_x",gt_x)
 
@@ -798,11 +840,11 @@ class BatchNorm2dQ(torch.autograd.Function):
             grad_mean = grad_output.sum(stats_dimensions)
             grad_mean = grad_mean.reshape(broadcast_shape)
 
-            # inv_var/num_element rounds to 0 at BITs=7 once num_element > 128, which
+            # inv_var/num_element rounds to 0 once num_element > 2**BITs, which
             # silently drops this whole term. apply inv_var while the sum is still large
             # and defer the division to the end, where there is magnitude to spare.
-            grad_mean = grad_mean.mul(inv_var) # 2**14
-            grad_mean, = to_fixed(*p_truncate(grad_mean)) # back to 2**7
+            grad_mean = grad_mean.mul(inv_var) # scale 2**(2*BITs)
+            grad_mean, = to_fixed(*p_truncate(grad_mean)) # back to 2**BITs
             grad_mean = div_public(grad_mean, -num_element)
             grad_mean, = to_float(grad_mean)
 
@@ -817,8 +859,8 @@ class BatchNorm2dQ(torch.autograd.Function):
             grad_std, = to_fixed_no_shift(grad_std)
             grad_std, =to_fixed(* p_truncate(grad_std))
 
-            grad_std = grad_std.mul(inv_var) # 2**14
-            grad_std, = to_fixed(*p_truncate(grad_std)) # back to 2**7
+            grad_std = grad_std.mul(inv_var) # scale 2**(2*BITs)
+            grad_std, = to_fixed(*p_truncate(grad_std)) # back to 2**BITs
             grad_std = div_public(grad_std, -num_element)
             grad_std, = to_float(grad_std) # final float form
 
@@ -1063,7 +1105,11 @@ def train_model(model, num_epochs, lr, max_batches = None):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     model.to(device)
-    bce = torch.nn.BCEWithLogitsLoss()
+    # CrossEntropyLoss over class indices: fc3 emits raw logits (no final activation) and CE
+    # applies log_softmax internally, giving the network a real gradient toward the correct
+    # class. BCEWithLogitsLoss over 100 one-hot targets minimised to a trivial "predict absent
+    # everywhere" solution (loss fell but accuracy stayed at chance -- see BITS_REPORT.md).
+    ce = torch.nn.CrossEntropyLoss()
     # here we will use SGD
     optimizer = torch.optim.SGD(model.parameters(), lr = lr, momentum = 0.9) # this ends up quantized in our backward pass.
 
@@ -1096,12 +1142,13 @@ def train_model(model, num_epochs, lr, max_batches = None):
                 break
             # start.record()
             inputs = inputs.to(device).to(model_dtype)
-            labels = labels.to(device).to(model_dtype)
+            # labels arrive one-hot (N, 100); CrossEntropyLoss wants class indices (N,).
+            targets = labels.to(device).argmax(1)
 
             optimizer.zero_grad()
             outputs = model(inputs)
             # print(outputs.shape)
-            loss = bce(outputs, labels)
+            loss = ce(outputs, targets)
 
             loss.backward()
             optimizer.step()
