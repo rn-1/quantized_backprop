@@ -15,6 +15,48 @@ from tqdm import tqdm
 
 BITs = 22
 
+# Dedicated fixed-point scale for the batch-norm inverse std-dev, inv_var = 1/sqrt(var) ("Method A").
+# inv_var is a small number that shares nothing else's dynamic range: on the global BITs grid it
+# rounds to 0 once var > 2**(2*BITs) (the forward "precision floor", see BITS_REPORT.md sec 8).
+# Holding it at 2**B_IV with B_IV > BITs pushes that floor out to var > 2**(2*B_IV), decoupling it
+# from the global BITs. The scale is public (a bit-shift), so it is MPC-benign, but it is NOT free:
+# the inv_var transient (2**(BITs+B_IV), and 2**(BITs+B_IV+log2 S) in the loss-scaled BN backward)
+# grows the ring ~1 bit per extra bit and can become the ring bottleneck.
+#
+# EMPIRICAL RESULT (full-epoch CIFAR-100 sweeps, _sweep_AplusS.py / _sweep_extra.py): on THIS net
+# the forward floor is never binding -- variance stays O(1-100), far below even BITs=8's floor of
+# 2**16 -- so B_IV > BITs buys NO accuracy at BITs 8 or 10 and only costs ring. The floor-lowering
+# to BITs=10 comes from loss scaling alone. B_IV is therefore left == BITs (Method A OFF, identical
+# to the original path). Raise it (e.g. BITs+8) only for a deeper / higher-variance net where var
+# actually approaches 2**(2*BITs); keep 1.5*BITs + B_IV < ~56 so g*m stays in the 57-bit ring.
+B_IV = BITs
+
+# Forward activation scaling for the softmax ("forward loss scale"). The softmax probabilities are
+# the one tensor whose natural values legitimately fall below the 2**-BITs grid floor: once the model
+# sharpens, off-target probs p_j collapse toward 0, and any p_j < 2**-BITs rounds to exactly 0 in the
+# forward. Those zeros feed the CE seed (p - onehot)/N, so the wrong-class gradient signal is DESTROYED
+# in the forward -- backward loss scaling S cannot rescue it (S lifts in backward; the value is already
+# 0 before backward runs). This is the genuine forward floor that caps BITs=8 (BITS_REPORT sec 8; the
+# gap accelerates late in training as more probs drop under the floor -- the underflow fingerprint).
+#
+# The fix mirrors backward loss scaling but on the forward path: carry the softmax internals (exp, and
+# the final probs) at an ELEVATED scale 2**(BITs+A), so p_j down to 2**-(BITs+A) survive forward. A is
+# a PUBLIC power-of-two exponent, so every scale/unscale is an exact shift (MPC-benign, no extra
+# truncation round). The elevation is stripped in backward by dividing by N<<A instead of N, so the
+# returned gradient is unchanged in scale -- only the small components that used to underflow now
+# survive. Setting A = log2(S) - log2(N) makes the forward floor coincide with the backward floor, so
+# the two move down together as S grows; A=0 exactly reproduces the un-scaled forward path.
+SOFTMAX_EXTRA_BITS = 0
+
+# Ring bit-width l of the simulated fixed-point dtype (values live in Z_{2**RING_BITS}). This is the
+# TOTAL width -- integer + fractional + sign -- of the backing integer type a real deployment would use.
+# It matters in exactly one place, ring_truncate: the stochastic truncation masks span the full ring, so
+# its correctness-failure rate is ~ |x|/2**RING_BITS (a wrong carry when the mask lands below |x|). All
+# other ops are exact int64 and, as long as the payload peak P < 2**(RING_BITS-1), wrap-free -- so lowering
+# RING_BITS faithfully models a narrower dtype provided P stays under that bound (monitor it). The minimum
+# viable RING_BITS = smallest fixed-point representation this training tolerates; sweep it down to find it.
+RING_BITS = 57
+
 # --- MPC op-count instrumentation ---------------------------------------------------------
 # Wall-clock of this simulator is NOT a cost proxy for a real secure-MPC deployment (it runs
 # locally with no communication). What DOES track MPC cost is the count of operations whose
@@ -130,12 +172,14 @@ def inverse_sqrt(x):
     p, = to_fixed(*p_truncate((p - b) * u))
     g = p + c
     m_float = torch.pow(torch.tensor(2.0, device=x.device), -(e.float() + 1.0)/2.0)
-    m, = to_fixed(m_float)
-    g_mult = (g * m)
+    # hold the scale factor (and hence inv_var) at 2**B_IV, not 2**BITs. m_float carries the whole
+    # 1/sqrt(var) magnitude, so quantizing it at 2**BITs is exactly what underflowed to 0 once
+    # var > 2**(2*BITs) -- the forward floor. at 2**B_IV the floor moves out to var > 2**(2*B_IV).
+    m = torch.round(m_float * (2**B_IV)).to(torch.int64)  # scale 2**B_IV
+    g_mult = (g * m)                                      # g@2**BITs * m@2**B_IV -> 2**(BITs+B_IV)
     # g ~= 1/sqrt(u)
-    # print(g_mult.dtype)
 
-    result, = p_truncate(g_mult)
+    result = ring_truncate(g_mult, BITs)                 # drop BITs -> inv_var int @ 2**B_IV
 
     # comparison
     base, = to_float(x)
@@ -331,63 +375,71 @@ def s_truncate(*tensors):
     
     return tuple(output)
 
-def p_truncate(*tensors):
+def ring_truncate(tensor, m):
+    # protocol core: stochastic truncation of the low m bits of a 57-bit ring element. returns
+    # an int64 whose scale is reduced by 2**m (i.e. round(tensor / 2**m) as a ring element). m is
+    # PUBLIC, so any value is a free bit-shift on a real instance. p_truncate wraps this with the
+    # /2**m rescale that turns a product of two 2**m-scaled operands back into a real value; call
+    # ring_truncate directly when the two operands were scaled ASYMMETRICALLY -- e.g. an
+    # activation at 2**BITs times inv_var at 2**B_IV, where the fractional bits to drop is B_IV,
+    # not BITs -- and you want the result as an int at 2**BITs rather than a real.
 
     # predef consts
-    l = 57 # actual size
-    k = 64 # repr ring
+    l = RING_BITS # ring bit-width of the simulated fixed-point dtype (public, swept to find the minimum)
+
+    assert tensor.dtype == torch.int64, "ring_truncate only works on integer tensors"
+
+    OP_COUNTS['p_truncate_calls'] += 1
+    OP_COUNTS['p_truncate_elems'] += tensor.numel()
+
+    # the simulated dtype is a 57-bit ring, but to_fixed hands us a signed int64, which is
+    # not a ring element: a negative value carries bits 57..63 set. carry below then reads
+    # 1 where it should read 0, and the tiebreaker injects 2**(l-m), so the result returns
+    # ~2**43 garbage whenever R happens to land below |tensor| -- rate |tensor|/2**l, which is
+    # negligible for small values but reaches 1e-6 by 2**37 and wrecks a whole layer.
+    # reduce into Z_{2**l} first. this is free on a real instance rather than an extra
+    # operation: shares are always stored reduced, so the value arrives in this form.
+    tensor = tensor & ((1 << l) - 1)
+
+    # masks
+    r1 = torch.round(torch.rand(tensor.shape, device = tensor.device)*2**(l-m)).to(torch.int64)
+    r2 = torch.round(torch.rand(tensor.shape, device = tensor.device)*2**(m)).to(torch.int64)
+    b = torch.round(torch.rand(tensor.shape, device = tensor.device)).to(torch.int64) # this will be 1 or 0 uniform
+
+    # masked values
+    R = r1 * (2**m) + r2
+    S = tensor + (b << l) + R
+
+    # decomposition, rounding bits
+    carry = (S >> l) & 1 # if S > l, these are bits above l
+    low = S & ((2**l) - 1) # these are bits below l
+
+    v = carry ^ b # tiebreaker
+
+    # unmask
+    a = (low >> m)
+    b = a - r1
+    c = b + ((v)<< (l-m))
+
+    #compare ==> removed for training.
+
+    # c is a Z_{2**(l-m)} element. the protocol itself never needs this step -- ring
+    # arithmetic carries the sign implicitly and you decode only at reveal -- but the sim
+    # consumes a decoded value, so decode it here.
+    c = c & ((1 << (l - m)) - 1)
+    c = torch.where(c >= (1 << (l - m - 1)), c - (1 << (l - m)), c)
+
+    return c
+
+
+def p_truncate(*tensors):
+    # truncate a product of two 2**BITs-scaled operands (scale 2**(2*BITs)) back to a real value:
+    # drop BITs bits on the ring, then rescale the retained integer by 2**BITs.
     m = BITs # truncation bits
-
     output = []
-
     for tensor in tensors:
-
-        assert tensor.dtype == torch.int64, "p_truncation only works on integer tensors"
-
-        OP_COUNTS['p_truncate_calls'] += 1
-        OP_COUNTS['p_truncate_elems'] += tensor.numel()
-
-        # the simulated dtype is a 57-bit ring, but to_fixed hands us a signed int64, which is
-        # not a ring element: a negative value carries bits 57..63 set. carry below then reads
-        # 1 where it should read 0, and the tiebreaker injects 2**(l-m), so y returns ~2**43
-        # garbage whenever R happens to land below |tensor| -- rate |tensor|/2**l, which is
-        # negligible for small values but reaches 1e-6 by 2**37 and wrecks a whole layer.
-        # reduce into Z_{2**l} first. this is free on a real instance rather than an extra
-        # operation: shares are always stored reduced, so the value arrives in this form.
-        tensor = tensor & ((1 << l) - 1)
-
-        # masks
-        r1 = torch.round(torch.rand(tensor.shape, device = tensor.device)*2**(l-m)).to(torch.int64)
-        r2 = torch.round(torch.rand(tensor.shape, device = tensor.device)*2**(m)).to(torch.int64)
-        b = torch.round(torch.rand(tensor.shape, device = tensor.device)).to(torch.int64) # this will be 1 or 0 uniform
-
-        # masked values
-        R = r1 * (2**m) + r2
-        S = tensor + (b << l) + R
-
-        # decomposition, rounding bits
-        carry = (S >> l) & 1 # if S > l, these are bits above l
-        low = S & ((2**l) - 1) # these are bits below l
-
-        v = carry ^ b # tiebreaker
-
-        # unmask
-        a = (low >> m)
-        b = a - r1
-        c = b + ((v)<< (l-m))
-
-        #compare ==> removed for training.
-
-        # c is a Z_{2**(l-m)} element. the protocol itself never needs this step -- ring
-        # arithmetic carries the sign implicitly and you decode only at reveal -- but this
-        # returns a float for the rest of the simulation to consume, so decode it here.
-        c = c & ((1 << (l - m)) - 1)
-        c = torch.where(c >= (1 << (l - m - 1)), c - (1 << (l - m)), c)
-
-        y = c/2**m
-
-        output.append(y.to(torch.float64))
-
+        c = ring_truncate(tensor, m)
+        output.append((c.to(torch.float64) / 2**m))
     return tuple(output)
 
 
@@ -719,7 +771,7 @@ class BatchNorm2dQ(torch.autograd.Function):
         if training or inv_var is None:
             # variance, = to_fixed(*p_truncate(variance))
             # print(variance)
-            inv_var, = to_fixed(inverse_sqrt(variance))
+            inv_var = inverse_sqrt(variance)  # already int @ 2**B_IV (see inverse_sqrt / B_IV)
             # print("inv_var:",*to_float(inv_var))
             gt_x, = to_float(x)
             gt_var = gt_x.var(stats_dimensions, unbiased=True)
@@ -751,10 +803,10 @@ class BatchNorm2dQ(torch.autograd.Function):
 
         # compute z-scores:
         # print( x- mean )
-        x_norm = (x - mean) * inv_var
+        x_norm = (x - mean) * inv_var            # (x-mean)@2**BITs * inv_var@2**B_IV -> 2**(BITs+B_IV)
         # print(mean)
         # print(inv_var)
-        x_norm, = p_truncate(x_norm)
+        x_norm = ring_truncate(x_norm, B_IV)     # drop B_IV -> x_norm int @ 2**BITs
         # print("x_norm",x_norm)
         # print("expected x_norm:", gt_x_norm)
         # report_error("x_norm", x_norm, gt_x_norm)
@@ -763,7 +815,7 @@ class BatchNorm2dQ(torch.autograd.Function):
 
 
         # print(x_norm)
-        x_norm, = to_fixed(x_norm)
+        # x_norm is already an int @ 2**BITs from ring_truncate above (no to_fixed needed)
 
         # save context and return:
         ctx.save_for_backward(gt_x_norm, x_norm, weight, inv_var)
@@ -831,8 +883,8 @@ class BatchNorm2dQ(torch.autograd.Function):
         grad_output, = p_truncate(grad_output)
         grad_output, = to_fixed(grad_output)
         
-        grad_input = grad_output.mul(inv_var)
-        grad_input, = p_truncate(grad_input)
+        grad_input = grad_output.mul(inv_var)                    # grad_out@2**BITs * inv_var@2**B_IV -> 2**(BITs+B_IV)
+        grad_input, = to_float(ring_truncate(grad_input, B_IV))  # drop B_IV -> int @ 2**BITs -> real
 
         if training:
             # compute gradient term that is due to the mean:
@@ -843,8 +895,8 @@ class BatchNorm2dQ(torch.autograd.Function):
             # inv_var/num_element rounds to 0 once num_element > 2**BITs, which
             # silently drops this whole term. apply inv_var while the sum is still large
             # and defer the division to the end, where there is magnitude to spare.
-            grad_mean = grad_mean.mul(inv_var) # scale 2**(2*BITs)
-            grad_mean, = to_fixed(*p_truncate(grad_mean)) # back to 2**BITs
+            grad_mean = grad_mean.mul(inv_var) # inv_var@2**B_IV -> scale 2**(BITs+B_IV)
+            grad_mean = ring_truncate(grad_mean, B_IV) # drop B_IV -> int @ 2**BITs
             grad_mean = div_public(grad_mean, -num_element)
             grad_mean, = to_float(grad_mean)
 
@@ -859,8 +911,8 @@ class BatchNorm2dQ(torch.autograd.Function):
             grad_std, = to_fixed_no_shift(grad_std)
             grad_std, =to_fixed(* p_truncate(grad_std))
 
-            grad_std = grad_std.mul(inv_var) # scale 2**(2*BITs)
-            grad_std, = to_fixed(*p_truncate(grad_std)) # back to 2**BITs
+            grad_std = grad_std.mul(inv_var) # inv_var@2**B_IV -> scale 2**(BITs+B_IV)
+            grad_std = ring_truncate(grad_std, B_IV) # drop B_IV -> int @ 2**BITs
             grad_std = div_public(grad_std, -num_element)
             grad_std, = to_float(grad_std) # final float form
 
@@ -875,10 +927,171 @@ class BatchNorm2dQ(torch.autograd.Function):
         return (grad_input, None, None, grad_weight, grad_bias)
 
 
+# =============================================================================================
+# Fixed-point / MPC cross-entropy loss  (replaces torch.nn.CrossEntropyLoss, BITS_REPORT sec 11.1)
+# ---------------------------------------------------------------------------------------------
+# torch.nn.CrossEntropyLoss computes softmax + the seed gradient (softmax - onehot)/N in CLEAR
+# float64. That seed gradient feeds fc3's backward, i.e. it is the top of the whole backward pass --
+# the exact quantity sec 8/9 identify as the binding precision floor -- so leaving it un-quantized
+# makes the low-BITs / loss-scaling conclusions optimistic. This is the fixed-point replacement.
+#
+# It follows the Conv2dQ / LinearQ / BatchNorm2dQ pattern: an explicit autograd.Function so torch
+# never differentiates through the (secret, nonlinear) softmax internals -- backward() supplies the
+# gradient directly. Softmax needs three primitives a real protocol runs on secret shares:
+#   fixed_exp        -- range-reduced fixed-point exp (2^k * 2^f), IMPLEMENTED below.
+#   fixed_reciprocal -- 1/sum(exp) via (1/sqrt)^2 reusing inverse_sqrt, IMPLEMENTED below.
+#   secure_max       -- per-row max (stability shift); a comparison, so exact in fixed point (no
+#                       quantization error) -- left as a clear max, which is faithful; only its DReLU
+#                       *cost* (sec 7.2) is unmodelled. NOT an accuracy gap.
+# The only clear-float step is the loss VALUE's log (monitoring-only, off the gradient path).
+#
+# SCALE CONVENTION (matches the rest of the file): a real value v is stored as int64 round(v*2^BITs);
+# a product of two 2^BITs operands is at 2^(2*BITs) and is brought back with p_truncate.
+# =============================================================================================
+
+def secure_max(x, dim=1):
+    # PRIMITIVE (STUB): per-row max of the logits, used only as the softmax numerical-stability
+    # shift (softmax is invariant to subtracting a per-row constant). In MPC this is a max-reduction
+    # over C elements -- a DReLU/comparison tree (already a counted primitive type, sec 7.2), scale-
+    # preserving (no truncation). x is int64 @ 2^BITs; returns int64 @ 2^BITs, shape (N,1).
+    # TODO: replace with the secure comparison-tree max.
+    return x.max(dim=dim, keepdim=True).values
+
+
+# 2^f minimax-ish polynomial coefficients on f in [0,1) (Taylor of 2^f = e^(f ln2) to cubic;
+# max |err| ~0.6% at f->1, dominated by the fractional-part approximation). Bump the degree here if
+# the softmax gradient needs it -- this is the one accuracy knob for fixed_exp.
+_EXP2_COEFFS = [1.0, math.log(2.0), (math.log(2.0) ** 2) / 2.0, (math.log(2.0) ** 3) / 6.0]
+
+def fixed_exp(x, extra_bits=0):
+    # Fixed-point exp via range reduction (Keller & Sun 2022 / Aly & Smart 2019, BITS_REPORT sec 12):
+    #   e^x = 2^(x*log2 e) = 2^k * 2^f,   t = x*log2 e = k + f,  k = floor(t) <= 0,  f in [0,1).
+    # The integer part 2^k is an exact (public-amount-per-element) shift; the fractional part 2^f is a
+    # polynomial on [0,1). Inputs are <= 0 (post max-shift) so k <= 0 and the shift is always right.
+    # x is int64 @ 2^BITs; returns e^x as int64 @ 2^(BITs+extra_bits), in (0,1]. extra_bits>0 elevates
+    # the OUTPUT scale so that small e^x (very negative x) survive to 2^-(BITs+extra_bits) instead of
+    # underflowing at 2^-BITs -- the forward softmax-scaling path (see SOFTMAX_EXTRA_BITS). The left-
+    # shift is applied BEFORE the final right-shift by -k, so the extra bits are retained through the
+    # only lossy step; extra_bits=0 is the original 2^BITs path exactly.
+    OP_COUNTS['inv_sqrt_calls'] += 1                 # reuse the nonlinear counter (exp ~ inv_sqrt cost)
+    OP_COUNTS['inv_sqrt_elems'] += x.numel()
+
+    t = torch.round(x.to(torch.float64) * math.log2(math.e)).to(torch.int64)  # t @ 2^BITs (public mult)
+    k = t >> BITs                                    # integer part, floor (arith shift), <= 0
+    f = t - (k << BITs)                              # fractional part @ 2^BITs, in [0, 2^BITs)
+
+    # 2^f by Horner on the fixed-point grid: (((c3*f + c2)*f + c1)*f + c0
+    coeffs = [torch.round(torch.tensor([c], dtype=torch.float64, device=x.device) * (2 ** BITs)).to(torch.int64)
+              for c in _EXP2_COEFFS]
+    p = coeffs[-1]
+    for c in reversed(coeffs[:-1]):
+        p, = to_fixed(*p_truncate(p * f))            # p*f @ 2^(2*BITs) -> @ 2^BITs
+        p = p + c
+    # p ~ 2^f @ 2^BITs, in [1,2). multiply by 2^k = right shift by -k (k<=0), clamped (>=63 -> 0).
+    # elevate by extra_bits FIRST (exact left-shift) so the right-shift by -k keeps extra_bits low bits.
+    p = p << extra_bits                              # 2^f @ 2^(BITs+extra_bits)
+    shift = torch.clamp(-k, max=63)
+    result = torch.bitwise_right_shift(p, shift)     # e^x @ 2^(BITs+extra_bits)
+    return result
+
+
+def fixed_reciprocal(d):
+    # Fixed-point reciprocal via 1/d = (1/sqrt(d))^2: reuse the tested inverse_sqrt, then square. d is
+    # the softmax row-sum (>= 1). Squaring roughly doubles inverse_sqrt's relative error, so this is a
+    # slightly PESSIMISTIC noise model vs a native secure reciprocal (Newton) -- the safe direction for
+    # re-checking the BITs floor. Op-count-wise it charges one inv_sqrt + one multiply, not a native
+    # reciprocal's round profile (fine: softmax runs once/sample, negligible bandwidth, BITS_REPORT
+    # sec 7.2). d int64 @ 2^BITs -> 1/d int64 @ 2^BITs.
+    # TODO (optional): swap for a native Newton reciprocal if an accurate round count is needed.
+    r = inverse_sqrt(d)                              # 1/sqrt(d) @ 2^B_IV
+    return ring_truncate(r * r, 2 * B_IV - BITs)     # (1/sqrt(d))^2 = 1/d @ 2^BITs
+
+
+class CrossEntropyLossQ(torch.autograd.Function):
+    # Fixed-point cross-entropy over raw logits (fc3 output). forward returns the scalar loss (for
+    # logging); backward returns d loss / d logits = (softmax - onehot)/N, scaled by grad_output
+    # (which carries the public loss-scale S from (S*loss).backward()).
+
+    @staticmethod
+    def forward(ctx, logits, targets):
+        # logits: (N, C) float @ model dtype.  targets: (N,) int64 class indices.
+        N, C = logits.shape
+        x, = to_fixed(logits)                          # -> int64 @ 2^BITs
+
+        # 1) numerical-stability shift: subtract per-row max (softmax is shift-invariant).
+        x = x - secure_max(x, dim=1)                   # ring subtract, still @ 2^BITs, values <= 0
+
+        # 2) exp, then 3) normalise by the reciprocal of the row-sum. The softmax internals are carried
+        # at an ELEVATED scale 2^(BITs+A) (A = SOFTMAX_EXTRA_BITS) so small off-target probs survive the
+        # forward instead of underflowing to 0 at the 2^-BITs grid floor (forward loss scaling; see the
+        # SOFTMAX_EXTRA_BITS note). A=0 reproduces the original 2^BITs path exactly.
+        A = SOFTMAX_EXTRA_BITS
+        e = fixed_exp(x, extra_bits=A)                 # (N,C) @ 2^(BITs+A), in (0,1]; small e^x preserved
+        denom = e.sum(dim=1, keepdim=True)             # (N,1) @ 2^(BITs+A)  (sum is linear -> free)
+        # the row-sum is >= 1 (the max element contributes e^0=1), so it never underflows -- drop it back
+        # to 2^BITs so fixed_reciprocal (built on inverse_sqrt @ 2^BITs) sees its expected input scale.
+        denom_lo = denom if A == 0 else ring_truncate(denom, A)  # (N,1) @ 2^BITs
+        inv_denom = fixed_reciprocal(denom_lo)         # (N,1) @ 2^BITs
+
+        probs = e * inv_denom                          # @ 2^(2*BITs+A)  (2^(BITs+A) * 2^BITs)
+        probs = ring_truncate(probs, BITs)             # -> int64 @ 2^(BITs+A), softmax probs (small kept)
+
+        ctx.save_for_backward(probs, targets)
+        ctx.N = N
+        ctx.A = A
+
+        # loss VALUE is monitoring-only: autograd does NOT differentiate through forward (custom
+        # backward supplies the grad), so computing -log(p_target) in the clear here is harmless and
+        # does not enter the gradient path. (A real run may skip the loss value entirely -- training
+        # only needs the backward seed.) clamp guards log(0) at the 2^-BITs grid floor.
+        pf = probs.to(torch.float64) / 2.0 ** (BITs + A)   # decode at the elevated softmax scale
+        p_target = pf[torch.arange(N, device=logits.device), targets]
+        loss = -torch.log(p_target.clamp_min(2.0 ** -(BITs + A))).mean()
+        return loss
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        # d loss / d logits = (softmax - onehot(target)) / N, then * grad_output (carries scale S).
+        probs, targets = ctx.saved_tensors
+        N = ctx.N
+        A = ctx.A                                      # softmax forward elevation (probs @ 2^(BITs+A))
+
+        onehot = torch.zeros_like(probs)
+        onehot[torch.arange(N, device=probs.device), targets] = (1 << (BITs + A))  # 1.0 @ 2^(BITs+A)
+        grad = probs - onehot                          # @ 2^(BITs+A), ring subtract, values in [-1, 1]
+
+        # The seed gradient is S*(softmax - onehot)/N. S (the public loss scale, grad_output), 1/N, and
+        # the forward elevation 2^A are all PUBLIC scalars, but the ORDER of application decides whether
+        # the small off-target components (~p_j/N) survive quantization. Two floors combine here:
+        #   * FORWARD floor -- fixed above by carrying probs at 2^(BITs+A): p_j down to 2^-(BITs+A)
+        #     survive the softmax instead of underflowing to 0 before backward ever runs.
+        #   * BACKWARD floor -- fixed by applying S FIRST (an exact power-of-two shift that lifts), THEN
+        #     rounding the combined /(N*2^A) on the grid at the lifted scale. The single truncation is
+        #     round((p-y)*S / N) performed while the value is large, so small components land on the grid.
+        # Doing the /N before the *S rounds an already-underflowed intermediate -- that was the original
+        # bug. Choosing A = log2(S) - log2(N) lines the two floors up so they descend together as S grows.
+        # With A=0 and S=1 this reproduces both underflow floors exactly (sec 8), which is why forward
+        # scaling (A>0) AND loss scaling (S>1) are both needed to push BITs below 10.
+        grad = grad * grad_output.to(torch.int64)      # * S first (public shift), exact, @ 2^(BITs+A)
+        grad = div_public(grad, N << A)                # round((p-y)*S / N) back to 2^BITs; strips the A
+        #                                                elevation (N*2^A) AND the /N in one rounding, done
+        #                                                at the lifted scale so small components survive.
+        grad, = to_float(grad)                         # decode @ 2^BITs; fc3 (LinearQ.backward) requantizes
+
+        # gradients must line up with forward's inputs (logits, targets); targets needs none.
+        return grad, None
+
+
+def cross_entropy_q(logits, targets):
+    # convenience wrapper so it drops into the training loop exactly like torch's CE:
+    #   loss = cross_entropy_q(model(x), targets)   ->   (S * loss).backward()
+    return CrossEntropyLossQ.apply(logits, targets)
+
+
 class CNNModelQ(nn.Module):
     def __init__(self):
         # TODO
-        b = 255 # MAGIC NUMBER WHEEEEEE
+        b = 255 # MAGIC NUMBER 
 
         super(CNNModelQ, self).__init__()
 

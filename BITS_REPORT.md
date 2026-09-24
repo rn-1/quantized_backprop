@@ -573,6 +573,233 @@ epochs).](report_figs/sweep_degradation.png)
 
 ---
 
+## 10. Decoupling the forward inverse-variance floor ("Method A") — and the real floor it revealed
+
+§8 named two floors: the **backward-gradient** floor (fixed by loss scaling, §9) and the **forward
+`inv_var`** floor — `1/√var` rounds to 0 once `var > 2^(2·BITs)` (`simulate.py` inverse-sqrt →
+`to_fixed`). Loss scaling cannot touch the forward floor, and §9 flagged it as what makes BITs=10
+"fragile." **Method A** removes it: hold `inv_var` on a dedicated finer scale `2^B_IV` (`B_IV > BITs`)
+instead of the global grid, so the floor moves to `var > 2^(2·B_IV)`, decoupled from BITs. Mechanically
+this factored the ring-truncation core out of `p_truncate` into `ring_truncate(tensor, m)` (a public
+shift by any bit count; `p_truncate` unchanged for all existing callers) and routed the four `inv_var`
+consumers (fwd `x_norm`; bwd `grad_input`/`grad_mean`/`grad_std`) through it. The fix is real and
+regression-clean: the underflow onset moves from `var>2^26`→`>2^50` at BITs=13 (measured), and BITs=22
+is bit-identical to before.
+
+### 10.1 On this network the forward floor is never binding — Method A buys nothing
+
+The decisive test is the `EXTRA = B_IV − BITs` sweep (`EXTRA=0` ≡ Method A **off**), full epoch:
+
+| config | EXTRA=0 (floor present) | EXTRA=8 (floor removed) |
+|---|---|---|
+| BITs=10, S=2^14 | top-1 **17.28** @ ring 2^32.9 | top-1 **17.15** @ ring 2^41.0 |
+| BITs=8,  S=2^16 | top-1 **16.57** @ ring 2^31.0 | top-1 **16.51** @ ring 2^39.0 |
+
+Removing the floor changes accuracy by **nothing** (within noise) at either BITs — because BatchNorm
+variance on this net stays O(1–100), far below even BITs=8's floor of `2^16`. Worse, each extra
+`inv_var` bit **adds ~1 ring bit** (the transient `2^(BITs+B_IV)`, and `2^(BITs+B_IV+log2 S)` in the
+loss-scaled BN backward). So Method A is **pure ring cost with zero accuracy return here**, and is left
+**off by default (`B_IV = BITs`)**. The `ring_truncate` refactor is kept — it is a clean generalization
+and enables Method A by simply raising `B_IV` for a future higher-variance net. **The floor-lowering
+below BITs=22 comes entirely from loss scaling; the forward floor was a red herring for this workload.**
+
+### 10.2 With loss scaling alone, the floor drops to BITs=10 (full epoch, real top-1)
+
+Baseline 17.08 / 42.15. Method A off; loss scaling only:
+
+| config | top-1 | top-5 | Δtop-1 | ring (this net) |
+|---|---|---|---|---|
+| BITs=22 noscale | 16.98 | 41.91 | −0.10 | 2^55 |
+| BITs=13 + S=2^12 *(report §9 pick)* | 16.99 | 42.09 | −0.09 | 2^38 |
+| BITs=11 + S=2^14 | 17.02 | 42.09 | −0.06 | — |
+| **BITs=10 + S=2^14** | **17.15** | **42.19** | **+0.07** | **2^34** |
+| BITs=10 + S=2^16 | 17.20 | 42.27 | +0.12 | — |
+| BITs=8 + S=2^16 | 16.51 | 40.96 | −0.57 | 2^33 |
+
+**BITs=10 matches float32**, three bits below the report's locked-in BITs=13. The report had BITs=10
+working once (17.12) but called it fragile *because of the forward floor* — which §10.1 shows never
+fires here, so BITs=10 is not fragile at all. **BITs=8 is a soft floor**: trainable but ~0.5 top-1
+short, and the `EXTRA` sweep proves that gap is the **coarse forward activation/weight grid** (`2^-8`),
+**not** `inv_var` — so no inverse-variance fix (A or B) can recover it.
+
+### 10.3 Multi-epoch fidelity of the new floor (12 epochs, §6.2/§9.1 protocol)
+
+| metric | BITs=13 + S=2^12 (anchor) | **BITs=10 + S=2^14 (new)** | BITs=8 + S=2^16 (soft) |
+|---|---|---|---|
+| top-1 gap vs base (all epochs) | −0.02 mean, −0.30 worst | **+0.08 mean, −0.20 worst** | −0.26 mean, **−1.11 worst (early)** |
+| e9 early-stop quant t1 / t5 | 40.68 / 70.10 | **40.69 / 70.46** | 40.24 / 70.71 |
+| param RMSE @ e12 | 3.18 % | **4.76 %** | **9.06 %** |
+| ring trajectory (e1→e12) | flat 2^37–2^39.7 | **flat 2^32.9–2^35.6** | flat 2^31–2^33.4 |
+| nonfinite | 0 / epoch | 0 / epoch | 0 / epoch |
+
+- **BITs=13 + S=2^12 reproduces §9.1 to the decimal** (RMSE 3.18 %, ring ~2^38, gap within noise) —
+  independent confirmation that the `ring_truncate` refactor changed nothing.
+- **BITs=10 + S=2^14 is validated as the new robust floor**: accuracy tracks the baseline the whole way
+  (mean gap *positive*, +0.08; worst −0.20, inside the ±0.66 pt noise band), 0 nonfinite, and the ring
+  is a *flat* ~2^34 — **~4 bits below BITs=13** and never creeping. The one cost is a steeper param-RMSE
+  drift (4.76 % vs 3.18 %), the expected price of the coarser 2^-10 forward grid (§9.1: forward grid,
+  not gradient precision, drives the drift). Still linear, still bounded, functionally silent.
+- **BITs=8 + S=2^16 confirms the soft floor over epochs**: never diverges (0 nonfinite), but carries a
+  consistent early-epoch deficit (−0.5 to −1.1 pt through e5), never reaches the baseline's low loss,
+  and drifts ~2× faster (RMSE 9.06 %). Reachable, not free — not recommended.
+
+### 10.4 Method B (floating `inv_var`) assessment — will not help this workload
+
+Method B (carry `inv_var` as a normalized mantissa + exponent `(g, s)`) is a *better* implementation of
+the **same** fix as Method A — it removes the forward floor adaptively and gives `inv_var` constant
+relative precision. Both of its advantages are ruled out here: (1) the floor it removes is not binding
+(§10.1, the `EXTRA` sweep tests exactly this), and (2) the precision it improves is on the
+**best-conditioned op in the graph** — inverse-sqrt at 154 dB SNR, ~0 % of injected noise (§8) — so a
+finer `inv_var` refines the cleanest quantity. It also cannot touch the two things that actually cap
+this net: the forward activation/weight grid (which caps BITs=8) and the backward gradients (already
+handled by `S`). **Method B is shelved as the robust upgrade to Method A's insurance** — worth building
+only for a deeper / higher-variance net where `var` genuinely approaches `2^(2·BITs)`.
+
+**Takeaway.** The minimum for *this* network is **BITs=10 + S=2^14** (validated, 12-epoch, ring ~2^34),
+not the 13 previously locked in — and that comes from loss scaling alone. To go below 10 the lever is
+the **forward grid** (per-tensor scaling, or stochastic rounding with error feedback), which is what
+caps BITs=8 — not the inverse-variance path, which §8/§10 rule out from three directions.
+
+---
+
+## 11. MPC primitive coverage audit — which secret-data ops still run in the clear
+
+Motivated by *"before trusting the bit-budget, is every operation a real protocol performs actually
+simulated?"*. The **arithmetic core is faithfully modeled** — every linear op quantizes and
+truncates, and the one nonlinear in the network body (inverse-sqrt) is a real polynomial protocol.
+But two operations that touch secret data are executed by stock float64 PyTorch with **no
+fixed-point quantization and no protocol** — so their cost and their injected error are both absent
+from every number in this report.
+
+| operation (secret data) | how the sim does it | MPC primitive a real run needs | modeled? |
+|---|---|---|---|
+| Conv / Linear matmul | float64 matmul → `p_truncate` | multiply + probabilistic truncation | truncation ✓; **ring accumulation ✗** (sums in float64, §7.1) |
+| BatchNorm mean | sum → `div_public(N)` | add + public-constant division | ✓ (N public) |
+| BatchNorm variance | multiply → `p_truncate` | multiply + truncation | ✓ |
+| BatchNorm 1/√var | `inverse_sqrt` (Lu et al. poly) | secure inverse-sqrt (range-reduce + poly) | ✓ |
+| ReLU | `nn.ReLU` (clear `max(0,x)`) | DReLU sign-bit + multiply-by-bit | **clear, but error-free by construction** (sign select, no rounding); cost counted (§7.2) |
+| truncation | `p_truncate` (probabilistic) | probabilistic truncation | ✓ (the exact variant's **comparison/correction step is removed** — `#compare ==> removed for training`) |
+| **softmax + cross-entropy** | `torch.nn.CrossEntropyLoss`, clear float64 | secure **max** + secure **exp** + secure **reciprocal** | **✗ not modeled** |
+| **SGD momentum + weight update** | `torch.optim.SGD`, clear float64 | public-const mults (μ, lr) → **truncation**; ring-resident momentum buffer | **✗ not modeled** |
+
+ReLU is worth a note because it *looks* unmodeled but isn't a gap: `ReLU(x)` in fixed point is a
+pure sign select (`x·b`, `b∈{0,1}`), which needs no truncation and injects **zero** quantization
+error, so the clear `nn.ReLU` is faithful to the fixed-point result; only its DReLU protocol *cost*
+matters and that is already counted (§7.2). The two rows that are genuine gaps are softmax/CE and the
+optimizer — the operations at the very **top** and very **end** of each training step.
+
+### 11.1 Secure softmax / cross-entropy — not modeled (the consequential one)
+
+**Scope: this is training-only.** The *network* has no softmax — `fc3` emits raw logits and returns
+them (`simulate.py:1082`) — and *inference* needs none either (`evaluate()` takes `argmax`/`topk`
+straight off the logits; softmax is monotonic and wouldn't change the ranking). Softmax lives
+**entirely inside the training loss**: `CrossEntropyLoss` is `NLL(log_softmax(logits))`, so it takes a
+per-sample max (numerical stability), `exp`, a sum, and a division — then the **gradient it seeds**,
+`(softmax(logits) − onehot)/N`, is computed **exactly** in float64 before being quantized into `fc3`'s
+backward. A real private-**training** protocol must do all of this on secret shares: **secure
+max/argmax** over the 100 logits, a **secure exp** approximation (a nonlinear like `inverse_sqrt`), a
+sum, and a **secure reciprocal**. (For private *inference* at these settings the gap is moot — there is
+no softmax and no optimizer; §11.2 falls away too.)
+
+- **Cost gap:** adds a max-reduction + a 100-wide secure-exp + a reciprocal *per sample* to the §7.2
+  op counts, which today cover only the forward + backward body.
+- **Error gap — this is why it matters for the bit budget:** every low-BITs result here rests on §8
+  (the binding floor is the *backward gradients*) and §9 (loss scaling `S` is calibrated to lift
+  those gradients off the grid). That calibration assumed a **clean seed gradient**. A secure
+  exp/reciprocal approximation would inject noise at the *very top* of backprop, and that noise rides
+  the entire backward chain — amplified by `S`. So modeling softmax could shift the loss-scaling
+  sweet spot and the BITs=10/13 floor. **Of all the unmodeled items, this is the one most likely to
+  move the precision conclusions**, because it perturbs exactly the quantity they depend on.
+
+### 11.2 Fixed-point optimizer (momentum + update) — not modeled
+
+`optimizer.step()` is stock float64 SGD: `v ← μ·v + g`, `w ← w − lr·v`. Both `μ=0.9` and `lr=1e-3`
+are **non-power-of-two public constants**, so on the ring each multiply of a secret needs a
+fixed-point public multiply **+ a truncation**, and the momentum buffer `v` must itself be
+ring-resident.
+
+- **Cost gap:** ~2 extra truncations per parameter tensor per step (μ·v and lr·v), absent from §7.2
+  (which stops at the backward pass and never counts the update).
+- **Error gap:** the momentum buffer accumulates **truncation-free** in the sim. On the ring it would
+  carry per-step rounding that compounds over the whole run — a plausible *additional* source of the
+  param-RMSE drift (§6.2 / §9.1), which is presently attributed entirely to forward-grid
+  re-quantization. Modeling it could steepen the measured drift slope.
+- The sim already treats BN's **running-stats** momentum in fixed point with truncation
+  (`simulate.py` ~L716–724), so the pattern exists; the optimizer just isn't held to it. (Running
+  stats are inert here — BN hardcodes `training=True` — so this is latent, not active.)
+- **Mitigation:** choosing `lr` as a power of two makes `lr·v` a free public shift; `μ` can't be, but
+  a shift-and-add momentum (e.g. `μ≈1−2^-k`) would remove the second update truncation.
+
+### 11.3 Previously-catalogued gaps (still open — restated for one complete list)
+
+From §7.1 / `RECOMMENDATIONS.md`: (a) **ring modular arithmetic** in the conv/linear accumulations
+(they sum in float64, so wraparound is exercised only inside `p_truncate`, not in the matmuls);
+(b) the **κ ≈ 40-bit statistical-hiding margin** (the mask reproduces rounding, not hiding);
+(c) **protocol-specific truncation error** (idealised probabilistic rounding, not a named protocol's
+profile); (d) a real **round-count model** (`calls` bounds round *structure*, ≠ round count).
+
+**Audit bottom line.** The arithmetic core is well-covered; the missing primitives are **secure
+softmax/CE** and the **fixed-point optimizer** — the clear-float bookends of each step. Prioritise
+softmax/CE: it is the only unmodeled item that injects error into the backward gradients, which are
+the exact quantity the entire low-BITs / loss-scaling result stands on.
+
+---
+
+## 12. Literature context — where this sits in secure-MPC training
+
+The closest published precedent is **Keller & Sun, "Secure Quantized Training for Deep Learning"
+(ICML 2022)** — the same setting as ours: quantized fixed-point secure training with **probabilistic
+truncation**, on MP-SPDZ. Identical representation `⌊x·2^f⌉`, and they likewise observe stochastic
+rounding is *"potentially helpful to training"* (matching §9). Positioning our results against that
+line of work:
+
+**Precision floor — our BITs=10 is aggressive vs the field.** Keller & Sun state the published range
+is **`f ∈ [13, 20]`** (16 the common default) and that **`f = 8` diverges**. Our uniform-scale floor
+of BITs=22 (§3) is *conservative* by comparison (it is the no-loss-scaling knee for this deeper
+CIFAR-100 net); our **loss-scaled BITs=10** (§10.3) sits *below the published range* at equal
+accuracy, and our BITs=8 soft-floor/near-divergence (§10.3) independently reproduces their "f=8
+diverges." The novel element is the loss-scaling (§9) that buys the sub-13 regime — it is what pushes
+below the field's floor, not any change to the arithmetic.
+
+**Inverse square root — we are one generation behind, but it doesn't bind.** Our `inverse_sqrt` is
+"adapted from Lu et al. (2020)"; Keller & Sun's Appendix C presents a `1/√x` protocol they show
+beats both Lu et al. (2020) and Aly & Smart (2019). Since §8/§10.4 establish that inverse-sqrt is the
+*best-conditioned* op here (154 dB SNR, ~0% of injected noise) and never the binding floor, adopting
+their protocol is a **round/communication cost** upgrade, not an accuracy one. (They also compute
+`1/√(v+ε)` directly rather than `sqrt` then divide, "to avoid numerical issues" — as we do.)
+
+**Batch variance — the field spends nothing on the formula, everything on `1/√·`.** No work in this
+line (Keller & Sun included) treats the variance sum-of-squares as more than ordinary dot-product
+machinery (multiply → truncate → accumulate in one batched round); the numerical attention is all on
+the inverse square root. The `E[X²]−E[X]²` vs `E[(X−μ)²]` choice and catastrophic cancellation are
+not raised as issues — plausibly because at `f ≥ 13` there is margin, and because BN needs `μ`
+anyway, making the numerically-stable two-pass form effectively free. Practical import: **keep the
+stable variance form (our `x.var()` path); the "cheaper" one-pass formula is not a trade the field
+takes**, and there is no precedent suggesting it helps.
+
+**Softmax / exp — fidelity-first is the documented choice.** Keller & Sun explicitly *reject* the
+SecureML ReLU-softmax surrogate — "it deteriorates accuracy in multilayer perceptrons to the extent
+that it does not justify the efficiency gains" — and compute real `exp` via range reduction (integer
+part exact, **fractional part by polynomial**, `a^x = 2^{x·log₂a}`). That validates the route (a)
+`fixed_exp` planned in §11.1 over the ReLU surrogate, and over CrypTen's `(1+x/2ⁿ)^{2ⁿ}`
+repeated-squaring exp, which they show has *"relatively low precision"* (>1% relative error at x=−4).
+
+**Methodological caution (their 2023 erratum).** Keller & Sun's follow-up note found their original
+cleartext-vs-secure accuracy gap was **not** a precision problem but a **max-pooling backward bug** in
+MP-SPDZ; fixing it closed the gap. Our net has no max-pooling, but the lesson recurs throughout this
+report (the §6.1 BCE base-rate collapse; the §10 Method-A red herring): **rule out implementation
+bugs before attributing an accuracy gap to fixed-point precision** — relevant when we re-check the
+BITs=10 floor after wiring in the fixed-point softmax (§11.1).
+
+*References:* Keller & Sun, *Secure Quantized Training for Deep Learning*, ICML 2022 (arXiv
+2107.00501); Keller & Sun, *A Note on "Secure Quantized Training…"*, ePrint 2023/1219; Knott et al.,
+*CrypTen*, NeurIPS 2021; Catrina & Saxena, *Secure Computation with Fixed-Point Numbers*, FC 2010
+(probabilistic truncation); Lu et al. (2020) and Aly & Smart (2019) (inverse sqrt); Mohassel & Zhang,
+*SecureML*, S&P 2017 (ReLU-softmax); Wagh et al., *Falcon* (2021) and Tan et al., *CryptGPU* (2021)
+(secure BN training).
+
+---
+
 ### Artifacts
 - `_sweep_bits.py` — coarse sweep (7→22)
 - `_noise_probe.py` — per-op injected-noise SNR + inverse-sqrt underflow map (§8)
@@ -589,5 +816,9 @@ epochs).](report_figs/sweep_degradation.png)
 - `_eval_multiepoch.py` — 12-epoch per-epoch fidelity trace (loss, top-1/5, param RMSE, wmax, ptrunc)
 - `_make_figs.py` → `report_figs/{loss_curve,accuracy_curve}.png` — the two figures in §6.2
 - `_op_counts.py` — per-step MPC op-count breakdown (§7.2); reads `simulate.OP_COUNTS`
+- `_sweep_bits_methodA.py` — CE BITs sweep isolating Method A on/off (`off` arg) (§10)
+- `_sweep_AplusS.py` — full-epoch Method-A + loss-scaling sweep, real top-1 (§10)
+- `_sweep_extra.py` / `_sweep_extra8.py` — `EXTRA = B_IV−BITs` sweep at BITs=10 / BITs=8 (§10)
+- `_multiepoch_check.py` — 12-epoch fidelity for BITs∈{13,10,8}+S (§10)
 
 **Recommendations, code-change log, and open TODOs:** see `RECOMMENDATIONS.md`.
