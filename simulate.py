@@ -196,46 +196,34 @@ def inverse_sqrt(x):
 # so no name ever lines up. zipping named_parameters() positionally is not a fix either: the
 # baseline keeps running stats as buffers whereas CNNModelQ keeps them as Parameters, so the
 # lists are different lengths (18 vs 24) and a positional zip mispairs everything after bn1.
-BASELINE_TO_Q = {
-    "conv1.weight": "k1",   "conv1.bias": "kb1",
-    "bn1.weight":   "bnw1", "bn1.bias":   "bnb1",
-    "conv2.weight": "k2",   "conv2.bias": "kb2",
-    "bn2.weight":   "bnw2", "bn2.bias":   "bnb2",
-    "conv3.weight": "k3",   "conv3.bias": "kb3",
-    "bn3.weight":   "bnw3", "bn3.bias":   "bnb3",
-    "fc1.weight":   "w1",   "fc1.bias":   "b1",
-    "fc2.weight":   "w2",   "fc2.bias":   "b2",
-    "fc3.weight":   "w3",   "fc3.bias":   "b3",
-}
-
-# running stats live as buffers on the baseline but as Parameters on CNNModelQ, so they are
-# looked up separately.
-BASELINE_RUNNING_TO_Q = {
-    "bn1.running_mean": "running_mean1", "bn1.running_var": "running_var1",
-    "bn2.running_mean": "running_mean2", "bn2.running_var": "running_var2",
-    "bn3.running_mean": "running_mean3", "bn3.running_var": "running_var3",
-}
-
 def paired_tensors(model_base, model_Q, include_running=True):
-    # yield (name, baseline_tensor, quantized_tensor) for each mapped pair. shapes are
-    # asserted so a rename or an architecture change fails loudly here rather than silently
-    # comparing unrelated tensors, which is the failure the positional zip allowed.
+    # yield (name, baseline_tensor, quantized_tensor) for each mapped pair. The baseline and the
+    # quantized model are built from the SAME block code (see _ResNet), so their parameter and
+    # buffer NAMES are identical -- we pair by name. Shapes are asserted so any structural drift
+    # fails loudly here rather than silently comparing unrelated tensors. Running stats live as
+    # buffers on both; num_batches_tracked (baseline-only) is not a mapped quantity and is skipped.
     params_b = dict(model_base.named_parameters())
-    buffers_b = dict(model_base.named_buffers())
     params_q = dict(model_Q.named_parameters())
+    buffers_b = dict(model_base.named_buffers())
+    buffers_q = dict(model_Q.named_buffers())
 
-    pairs = list(BASELINE_TO_Q.items())
-    if include_running:
-        pairs += list(BASELINE_RUNNING_TO_Q.items())
-
-    for bname, qname in pairs:
-        base = params_b.get(bname, buffers_b.get(bname))
-        quant = params_q.get(qname)
-        assert base is not None, f"baseline has no parameter/buffer named {bname}"
-        assert quant is not None, f"quantized model has no parameter named {qname}"
+    for name, base in params_b.items():
+        quant = params_q.get(name)
+        assert quant is not None, f"quantized model has no parameter named {name}"
         assert base.shape == quant.shape, \
-            f"shape mismatch: {bname} {tuple(base.shape)} vs {qname} {tuple(quant.shape)}"
-        yield bname, base, quant
+            f"shape mismatch: {name} {tuple(base.shape)} vs {tuple(quant.shape)}"
+        yield name, base, quant
+
+    if include_running:
+        for name, base in buffers_b.items():
+            if not (name.endswith("running_mean") or name.endswith("running_var")):
+                continue
+            quant = params_q.get(name, buffers_q.get(name))
+            if quant is None:
+                continue
+            assert base.shape == quant.shape, \
+                f"shape mismatch: {name} {tuple(base.shape)} vs {tuple(quant.shape)}"
+            yield name, base, quant
 
 def sync_models(model_base, model_Q):
     # copy the baseline's weights into the quantized model so both start from identical
@@ -546,12 +534,20 @@ class Conv2dQ(torch.autograd.Function):
 
         # same problem
         # kernel is an fp
+        # conv_transpose2d must reproduce the forward's input spatial size. With stride>1 the forward
+        # output size floors, so several input sizes map to the same output -- output_padding disambiguates.
+        # Recover it per spatial dim from the saved input size; without this a stride-2 conv whose
+        # (I + 2p - dilation*(k-1) - 1) is not divisible by stride returns a grad_input 1px too small.
+        op_h = input.size(2) - ((grad_output.size(2) - 1) * stride[0] - 2 * padding[0]
+                                + dilation[0] * (kernel_size_y - 1) + 1)
+        op_w = input.size(3) - ((grad_output.size(3) - 1) * stride[1] - 2 * padding[1]
+                                + dilation[1] * (kernel_size_x - 1) + 1)
         grad_input = F.conv_transpose2d( # this also requires floats. convert fp number here for calc
             grad_output,
             kernel,
             stride=stride,
             padding=padding,
-            output_padding=0,
+            output_padding=(op_h, op_w),
             groups=groups,
             dilation=dilation,
         )
@@ -1088,187 +1084,192 @@ def cross_entropy_q(logits, targets):
     return CrossEntropyLossQ.apply(logits, targets)
 
 
-class CNNModelQ(nn.Module):
-    def __init__(self):
-        # TODO
-        b = 255 # MAGIC NUMBER 
+# ============================================================================================
+# Residual CNN + MLP architecture, shared between the float baseline and the fixed-point model.
+# Both are built from the SAME block code via a `q` flag, so their submodule/parameter NAMES are
+# identical -- which is what lets paired_tensors/sync_models pair them by name (no hand map).
+#
+# Faithfulness of the new ops in the quantized path:
+#   * residual add (out + identity)  -- a ring add of two on-grid values: exact, free in MPC.
+#   * projection shortcut (1x1 conv) -- a Conv2dQ: already faithful.
+#   * global average pool            -- sum (on grid) then div_public by the public spatial count:
+#                                        one rounding onto the grid, same primitive as div_public.
+# ============================================================================================
 
-        super(CNNModelQ, self).__init__()
+# Toggle for the classifier head. True -> global average pool before the MLP (small classifier,
+# eases the fc weight-grid floor, less overfitting). False -> full flatten (large first FC).
+# Read at model construction; set simulate.GLOBAL_AVG_POOL before building the models to change it.
+GLOBAL_AVG_POOL = True
 
-        # kernels to pass as input. we essentially store our parameters here
-        # divide by dim of each mat/kernel
-        self.k1 = nn.Parameter(torch.rand(64,3,8,8, dtype=torch.float64) / 128, requires_grad = True) 
-        self.kb1 = nn.Parameter(torch.zeros(64, dtype=torch.float64)) 
-        
-        self.bnw1 = nn.Parameter(torch.rand(64, dtype=torch.float64) / 128, requires_grad = True) 
-        self.bnb1 = nn.Parameter(torch.zeros(64, dtype=torch.float64), requires_grad = True) 
-
-        self.k2 = nn.Parameter(torch.rand(256,64,8,8, dtype=torch.float64) / 128, requires_grad = True) 
-        self.kb2 = nn.Parameter(torch.zeros(256 ,dtype=torch.float64)) 
-
-        self.bnw2 = nn.Parameter(torch.rand(256, dtype=torch.float64) / 128, requires_grad = True) 
-        self.bnb2 = nn.Parameter(torch.zeros(256, dtype=torch.float64), requires_grad = True) 
-
-        self.k3 = nn.Parameter(torch.rand(1024,256,4,4, dtype=torch.float64) / 128, requires_grad = True) 
-        self.kb3 = nn.Parameter(torch.zeros(1024, dtype=torch.float64)) 
-
-        self.bnw3 = nn.Parameter(torch.rand(1024, dtype=torch.float64) / 128, requires_grad = True) 
-        self.bnb3 = nn.Parameter(torch.zeros(1024, dtype=torch.float64) , requires_grad = True) 
-
-        flatten_dim = 50176 
-
-        # output final is fine. use relu!
-        self.w1 = nn.Parameter(torch.rand(2048, 50176, dtype=torch.float64) / 128, requires_grad = True) 
-        self.b1 = nn.Parameter(torch.zeros(2048, dtype=torch.float64), requires_grad = True) 
-        
-        self.w2 = nn.Parameter(torch.rand(2048, 2048, dtype=torch.float64) / 128, requires_grad = True) 
-        self.b2 = nn.Parameter(torch.zeros(2048, dtype=torch.float64), requires_grad = True) 
-
-        self.w3 = nn.Parameter(torch.rand(100, 2048, dtype=torch.float64) / 128, requires_grad = True) 
-        self.b3 = nn.Parameter(torch.zeros(100, dtype=torch.float64), requires_grad = True) 
-
-        # running mean and var -- these aren't listed as params in the baseline model, so for comparison keep them here!
-        self.running_mean1 = nn.Parameter(torch.zeros(64, dtype=torch.float64), requires_grad=False)
-        self.running_var1 = nn.Parameter(torch.ones(64, dtype=torch.float64), requires_grad=False)
-
-        self.running_mean2 = nn.Parameter(torch.zeros(256, dtype=torch.float64))
-        self.running_var2 = nn.Parameter(torch.ones(256, dtype=torch.float64))
-
-        self.running_mean3 = nn.Parameter(torch.zeros(1024, dtype=torch.float64))
-        self.running_var3 = nn.Parameter(torch.ones(1024, dtype=torch.float64))
+# Architecture depth (read at model construction; set before building models to change).
+#   STAGE_BLOCKS -- number of residual basic blocks per conv stage (3 stages, widths WIDTHS).
+#   MLP_BLOCKS   -- number of residual MLP blocks in the classifier head.
+# e.g. [2,2,2] -> ~13 conv (ResNet-ish), [3,3,3] -> ~19, [5,5,5] -> ~31.
+STAGE_BLOCKS = [2, 2, 2]
+STAGE_WIDTHS = [64, 128, 256]
+MLP_BLOCKS = 2
 
 
-        # layers as functions
+# ---- fixed-point layer wrappers: torch-matching parameter names, compute via the Q autograd fns ----
 
-        self.conv1 = Conv2dQ.apply
-        self.bn1 = BatchNorm2dQ.apply
-        self.conv2 = Conv2dQ.apply
-        self.bn2 = BatchNorm2dQ.apply
-        self.conv3 = Conv2dQ.apply
-        self.bn3 = BatchNorm2dQ.apply
-        
-        self.flatten = nn.Flatten() # this has no params
-
-        self.fc1 = LinearQ.apply
-        self.fc2 = LinearQ.apply
-        self.fc3 = LinearQ.apply # this needs a fix.
-        # self.fc1 = nn.Linear(flatten_dim, 2048, dtype = torch.float64)  # TESTTEST
-        # self.fc2 = nn.Linear(2048, 2048, dtype = torch.float64)
-        # self.fc3 = nn.Linear(2048, 100, dtype = torch.float64) # TODO the outputs,
-
-
-
-        # activations
-        
-        self.rl1 = nn.ReLU()
-        self.rl2 = nn.ReLU()
-        self.rl3 = nn.ReLU()
-
-        self.rl4 = nn.ReLU()
-        self.rl5 = nn.ReLU() # given that ReLU is sign based, shouldn't be a problem.
+class QConv2d(nn.Module):
+    def __init__(self, cin, cout, k, stride=1, padding=0, bias=True):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(cout, cin, k, k, dtype=torch.float64))
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))     # init is overwritten by sync_models
+        if bias:
+            self.bias = nn.Parameter(torch.zeros(cout, dtype=torch.float64))
+        else:
+            self.register_parameter('bias', None)
+        self.stride, self.padding = stride, padding
 
     def forward(self, x):
-        # TODO
-        # stride, padding, dilation
-        x = self.conv1(x, self.k1, self.kb1, 2, 4, 1)
-        # print("1:",x)
-        x = self.bn1(x, self.running_mean1, self.running_var1, self.bnw1, self.bnb1)
-        x = self.rl1(x)
-        # print("2:",x)
-        x = self.conv2(x, self.k2, self.kb2, 1, 0, 1)
-        # print("3:",x)
-        x = self.bn2(x, self.running_mean2, self.running_var2, self.bnw2, self.bnb2)
-        x = self.rl2(x)
-        # print("4:",x)
-        x = self.conv3(x, self.k3, self.kb3, 1, 0, 1)
-        # print("5:",x)
-        x = self.bn3(x, self.running_mean3, self.running_var3, self.bnw3, self.bnb3)
-        x = self.rl3(x)
-        # print("6:",x)
-        x = self.flatten(x)
-        # print(x.shape)
-
-        x = self.fc1(x, self.w1, self.b1)
-        x = self.rl4(x)
-        # print("7:",x)
-        x = self.fc2(x, self.w2, self.b2)
-        x = self.rl5(x)
-        # print("8:",x)
-        x = self.fc3(x, self.w3, self.b3)
-        # x = self.rl6(x)
-        # print("9:",x)
+        bias = self.bias
+        if bias is None:                                          # bias-free conv (pre-BN): pass zeros
+            bias = torch.zeros(self.weight.shape[0], dtype=x.dtype, device=x.device)
+        return Conv2dQ.apply(x, self.weight, bias, self.stride, self.padding, 1)
 
 
+class QBatchNorm2d(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(c, dtype=torch.float64))
+        self.bias = nn.Parameter(torch.zeros(c, dtype=torch.float64))
+        self.register_buffer('running_mean', torch.zeros(c, dtype=torch.float64))
+        self.register_buffer('running_var', torch.ones(c, dtype=torch.float64))
 
-        return x
+    def forward(self, x):
+        return BatchNorm2dQ.apply(x, self.running_mean, self.running_var, self.weight, self.bias)
 
 
-class CNNModelBaseline(nn.Module):
+class QLinear(nn.Module):
+    def __init__(self, fin, fout):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(fout, fin, dtype=torch.float64))
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))     # overwritten by sync_models
+        self.bias = nn.Parameter(torch.zeros(fout, dtype=torch.float64))
+
+    def forward(self, x):
+        return LinearQ.apply(x, self.weight, self.bias)
+
+
+def _factory(q):
+    # return (Conv, BN, Lin) constructors with a uniform signature, float64+Q or float32+torch.
+    if q:
+        Conv = lambda ci, co, k, s, p, b: QConv2d(ci, co, k, s, p, b)
+        BN   = lambda c: QBatchNorm2d(c)
+        Lin  = lambda fi, fo: QLinear(fi, fo)
+    else:
+        Conv = lambda ci, co, k, s, p, b: nn.Conv2d(ci, co, k, stride=s, padding=p, bias=b)
+        BN   = lambda c: nn.BatchNorm2d(c, track_running_stats=True)
+        Lin  = lambda fi, fo: nn.Linear(fi, fo)
+    return Conv, BN, Lin
+
+
+class BasicBlock(nn.Module):
+    # ResNet basic block: conv-bn-relu-conv-bn (+ identity or 1x1-projection shortcut), then relu.
+    def __init__(self, cin, cout, stride, q):
+        super().__init__()
+        Conv, BN, _ = _factory(q)
+        self.conv1 = Conv(cin, cout, 3, stride, 1, False)
+        self.bn1   = BN(cout)
+        self.conv2 = Conv(cout, cout, 3, 1, 1, False)
+        self.bn2   = BN(cout)
+        self.relu  = nn.ReLU()
+        self.has_down = (stride != 1 or cin != cout)
+        if self.has_down:                                        # projection shortcut on shape change
+            self.down_conv = Conv(cin, cout, 1, stride, 0, False)
+            self.down_bn   = BN(cout)
+
+    def forward(self, x):
+        identity = x
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        if self.has_down:
+            identity = self.down_bn(self.down_conv(x))
+        return self.relu(out + identity)                        # residual add (ring add: exact/free)
+
+
+class MLPBlock(nn.Module):
+    # residual MLP block on a fixed width: fc-relu-fc (+ identity), then relu.
+    def __init__(self, dim, q):
+        super().__init__()
+        _, _, Lin = _factory(q)
+        self.fc1 = Lin(dim, dim)
+        self.fc2 = Lin(dim, dim)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        out = self.relu(self.fc1(x))
+        out = self.fc2(out)
+        return self.relu(out + x)                               # residual add
+
+
+class _ResNet(nn.Module):
+    # Shared backbone. q=True -> fixed-point (CNNModelQ); q=False -> float baseline.
+    # Depth is configurable via the module globals STAGE_BLOCKS / STAGE_WIDTHS / MLP_BLOCKS (read here):
+    # stem -> 3 conv stages (downsample at stage starts) -> head [GAP or flatten] -> fc->512 ->
+    # MLP_BLOCKS residual MLP blocks -> fc->100.
+
+    def __init__(self, q):
+        super().__init__()
+        self.q = q
+        Conv, BN, Lin = _factory(q)
+        self.relu = nn.ReLU()
+        blocks, widths = STAGE_BLOCKS, STAGE_WIDTHS
+
+        # stem: 32x32 -> 16x16
+        self.stem_conv = Conv(3, 64, 3, 2, 1, False)
+        self.stem_bn   = BN(64)
+
+        # residual stages (stage>0 downsamples by 2 at its first block): 16 -> 8 -> 4
+        self.stages = nn.ModuleList()
+        cin = 64
+        for si, (nb, cout) in enumerate(zip(blocks, widths)):
+            stage = nn.ModuleList()
+            for bi in range(nb):
+                stride = 2 if (bi == 0 and si > 0) else 1
+                stage.append(BasicBlock(cin, cout, stride, q))
+                cin = cout
+            self.stages.append(stage)
+
+        # head
+        self.use_gap = GLOBAL_AVG_POOL
+        feat_spatial = 4
+        fc_in = cin if self.use_gap else cin * feat_spatial * feat_spatial
+        self.fc_in_dim = fc_in
+        self.head_fc0 = Lin(fc_in, 512)
+        self.mlp = nn.ModuleList([MLPBlock(512, q) for _ in range(MLP_BLOCKS)])
+        self.head_fc_out = Lin(512, 100)
+
+    def _gap(self, x):
+        # Global average pool = sum / (public spatial count). Use torch's mean so the op stays
+        # differentiable (a hand-rolled to_fixed/div_public severs the autograd graph). Faithfulness
+        # is preserved because the pooled vector immediately enters head_fc0 (LinearQ), whose forward
+        # re-quantizes its input with to_fixed -- snapping any off-grid mean back onto the 2^-BITs grid.
+        # The /N gradient (1/N, a public scalar) is exact, matching the fixed-point average's backward.
+        return x.mean(dim=(2, 3))
+
+    def forward(self, x):
+        x = self.relu(self.stem_bn(self.stem_conv(x)))
+        for stage in self.stages:
+            for block in stage:
+                x = block(x)
+        x = self._gap(x) if self.use_gap else x.flatten(1)
+        x = self.relu(self.head_fc0(x))
+        for blk in self.mlp:
+            x = blk(x)
+        return self.head_fc_out(x)
+
+
+class CNNModelQ(_ResNet):
     def __init__(self):
-        super(CNNModelBaseline, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, (8,8), stride = 2, padding =4) # todo shapes for CIFAR
-        self.bn1 = nn.BatchNorm2d(64, track_running_stats=True)
-        self.conv2 = nn.Conv2d(64, 256, (8,8), stride = 1, padding = 0)
-        self.bn2 = nn.BatchNorm2d(256, track_running_stats=True)
-        self.conv3 = nn.Conv2d(256, 1024, (4,4), stride = 1, padding = 0)
-        self.bn3 = nn.BatchNorm2d(1024, track_running_stats=True)
-        
-        self.flatten = nn.Flatten()
-
-        flatten_dim = 50176# change as needed
-
-        self.fc1 = nn.Linear(flatten_dim, 2048)
-        self.fc2 = nn.Linear(2048, 2048)
-        self.fc3 = nn.Linear(2048, 100) # TODO the outputs, inputs of these NEED TO BE QUANTIZED (so do their weights, grads, etc)
+        super().__init__(q=True)
 
 
-        # activations
-        
-        self.rl1 = nn.ReLU()
-        self.rl2 = nn.ReLU()
-        self.rl3 = nn.ReLU()
-
-        self.rl4 = nn.ReLU()
-        self.rl5 = nn.ReLU()
-        # self.rl6 = nn.ReLU()
-
-        # for param in self.parameters():
-        #     print(param.dtype)
-        #     print(param.element_size()*param.nelement()
-
-    def forward(self,x):
-        x = self.conv1(x)
-        # print("1:", x)
-        x = self.bn1(x)
-        x = self.rl1(x)
-        # print("2:", x)
-
-        x = self.conv2(x)
-        # print("3:", x)
-        x = self.bn2(x)
-        x = self.rl2(x)
-        # print("4:", x)
-
-        x = self.conv3(x)
-        # print("5:", x)
-        x = self.bn3(x)
-        x = self.rl3(x)
-        # print("6:", x)
-
-        x = self.flatten(x)
-        # print(x.shape)
-
-        x = self.fc1(x)
-        x = self.rl4(x)
-        # print("7:", x)
-
-        x = self.fc2(x)
-        x = self.rl5(x)
-        # print("8:", x)
-
-        x = self.fc3(x)
-        # print("9:", x)
-        return x
+class CNNModelBaseline(_ResNet):
+    def __init__(self):
+        super().__init__(q=False)
 
 
 class one_hot:
@@ -1279,6 +1280,27 @@ class one_hot:
         lvec = torch.zeros(self.classes)
         lvec[label] = 1
         return lvec
+
+
+def augment_batch(x, pad=4):
+    # Standard CIFAR train-time augmentation, applied on-GPU each epoch (the training loop caches
+    # normalized images on device, so augmentation must be re-sampled per epoch, not baked into the
+    # cache). Per-sample random horizontal flip + per-sample reflect-pad-and-random-crop back to 32x32.
+    N, C, H, W = x.shape
+    # random horizontal flip (per sample)
+    flip = torch.rand(N, device=x.device) < 0.5
+    x = torch.where(flip[:, None, None, None], x.flip(-1), x)
+    # random crop: reflect-pad by `pad`, then take a random HxW window per sample
+    xp = F.pad(x, (pad, pad, pad, pad), mode='reflect')
+    Wp = W + 2 * pad
+    oy = torch.randint(0, 2 * pad + 1, (N,), device=x.device)
+    ox = torch.randint(0, 2 * pad + 1, (N,), device=x.device)
+    ar = torch.arange(H, device=x.device)
+    rows = oy[:, None] + ar[None, :]                                   # (N, H)
+    cols = ox[:, None] + ar[None, :]                                   # (N, W)
+    xr = torch.gather(xp, 2, rows[:, None, :, None].expand(N, C, H, Wp))
+    xc = torch.gather(xr, 3, cols[:, None, None, :].expand(N, C, H, W))
+    return xc
 
 
 def load_data(batch_size = 250):

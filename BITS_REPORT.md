@@ -303,6 +303,10 @@ ring at minimum** (only with reduced κ and tight magnitude control) and realist
 ring** — roughly 2× the per-share communication of 64-bit. Needing 22 fractional bits, once the
 security margin is layered on, pushes past the 57-bit container we simulated.
 
+> **Update (§14):** this is the BITs=22 *security* bound. For the recommended **BITs=10** floor, §14
+> measures the *correctness / dtype-fit* ring directly — a **37-bit** minimum (payload peak 2^35.6),
+> ~20 bits below the 57 we ran. The κ security margin is layered on top of that, separately.
+
 **Communication also scales with truncation count, not just ring size.** Each probabilistic
 truncation is an interactive sub-protocol; the count scales with the network (every conv/linear
 output and BN op truncates), so total online cost ≈ (number of truncations) × (per-share bytes at
@@ -800,6 +804,331 @@ BITs=10 floor after wiring in the fixed-point softmax (§11.1).
 
 ---
 
+## 13. Forward softmax scaling — attacking the forward floor directly
+
+§10 identified the lever to go below BITs=10 as the **forward grid**, not inverse-variance. §11.1 then
+made the softmax/CE faithful (`fixed_exp` + `fixed_reciprocal` + on-grid backward). With a real
+fixed-point softmax in place, the forward floor has a concrete, addressable mechanism: once the model
+sharpens, off-target probabilities `p_j` collapse below `2^-BITs` and round to **exactly 0** in the
+forward pass. Those zeros feed the CE seed `(p − onehot)/N`, so the wrong-class gradient signal is
+destroyed *before* backward runs — loss scaling `S` cannot recover it (it lifts in backward; the value
+is already 0). The signature is diagnostic: the BITs=8 gap **accelerates late in training** (e12 −2.69
+vs e1 −0.59), exactly as more probs drop under the floor.
+
+**The fix — forward loss scaling (`SOFTMAX_EXTRA_BITS = A`).** Mirror the backward `S` on the forward
+path: carry the softmax internals (`exp`, `probs`) at an elevated scale `2^(BITs+A)` so `p_j` down to
+`2^-(BITs+A)` survive. `A` is a public power of two (every scale/unscale is an exact shift, MPC-benign,
+no extra truncation round); the elevation is stripped in backward by dividing by `N<<A` instead of `N`,
+so the returned gradient scale is unchanged — only the previously-underflowed small components now
+survive. `A=0` reproduces the original path exactly. Setting `A = log2(S) − log2(N)` lines the forward
+floor up with the backward floor so they descend together.
+
+**Numerical check (aggregate CE-seed error vs. torch, realistic logits):**
+
+| BITs | A=0 (old) | A on | shrink |
+|---|---|---|---|
+| 8  | 3.52 % | **0.81 %** | 4.3× |
+| 10 | 1.16 % | **0.27 %** | 4.3× |
+| 13 | 0.37 % | 0.24 % | 1.5× |
+
+BITs=8 with forward scaling (0.81 %) is **better than BITs=10 was without it** (1.16 %).
+
+**12-epoch fidelity, forward scaling on (`A = log2 S − 7`, N=128):**
+
+| config | mean gap | worst gap | verdict | vs. no-fwd worst |
+|---|---|---|---|---|
+| BITs=13, S=2^12, A=5 | −0.05 | −0.34 | clean | −0.35 (≈) |
+| **BITs=10, S=2^14, A=7** | **+0.16** | **−0.02** | **clean, robust** | −0.29 → **−0.02** |
+| BITs=8, S=2^16, A=9 | −0.76 | −1.60 | soft floor | −2.69 → −1.60 |
+| BITs=7, S=2^17, A=10 | −0.83 | −5.93 | diverges late | — |
+| BITs=6, S=2^18, A=11 | −34.0 | −39.8 | dead | — |
+
+**Findings.**
+- **BITs=10 becomes near-lossless.** Worst-case gap over all 12 epochs −0.29 → **−0.02**, sitting
+  *above* baseline most epochs (mean +0.16). This is the clear win: the robust floor gains real margin.
+- **BITs=8 improved but did not clear.** Worst −2.69 → −1.60 (e12 −2.69 → −1.16). Softmax underflow was
+  *a* forward bottleneck, not *the* one — a second limiter (general per-layer activation/weight grid at
+  `2^-8`, per §10.2) still binds. Forward softmax scaling is **necessary but not sufficient** for 8.
+- **BITs=7 is not viable** (better than baseline early — quantization noise as regularization — then
+  collapses as the baseline sharpens); **BITs=6 is dead** (~1 % = chance).
+
+**Takeaway.** Forward softmax scaling makes **BITs=10 the near-lossless floor** and confirms the forward
+grid is the correct lever, but the integer floor stays at 10; cracking 8 needs full per-layer activation
+scaling, not just the softmax. Inert by default (`SOFTMAX_EXTRA_BITS=0`).
+
+## 14. Minimum faithful ring width — the smallest fixed-point dtype
+
+§7.1 bounded the ring at BITs=22 from the *security* side (~2^84 with κ). This section measures the
+*correctness / dtype-fit* minimum for the recommended **BITs=10** floor: the smallest ring `l` in which
+training still reaches baseline, with the simulation kept faithful.
+
+**Certainty check first — is float64 silently corrupting the sim?** The sim stores int64 but repeatedly
+casts to float64 (conv runs `F.conv2d` on int-valued float64; `to_float`/`div_public` cross the
+boundary), and float64 represents integers exactly only to `2^53`. Instrumenting the max magnitude at
+**every** int↔float boundary (not just `ring_truncate`):
+
+| boundary | BITs=13 peak | BITs=10 peak |
+|---|---|---|
+| ring_truncate input (pre-trunc accumulator) | **2^39.6** | **2^35.6** |
+| conv accumulator (float64) | 2^37.9 | 2^33.9 |
+| div_public (grad×S backward transient) | 2^30.0 | 2^31.0 |
+| **global payload peak P** | **2^39.6** | **2^35.6** |
+| **headroom to 2^53** | 13.4 bits | 17.4 bits |
+
+The true peak sits 13–17 bits below `2^53`: **the float64 simulation is faithful** — no int→float cast
+drops bits. The peak is the **pre-truncation conv/linear accumulator**, *not* loss scaling (`grad×S`
+is 2^30–31, well below) — so `S` is nearly free in ring terms, and lower BITs shrink the ring.
+
+**The ring sweep — the limiter is overflow, not truncation noise.** `RING_BITS` is now a parameter
+(`simulate.py`; ring_truncate reads it). Holding BITs=10/S=2^14/A=7 and sweeping `l` down: results are
+**byte-identical from l=57 to l=37**, then break at l≤36. The `|x|/2^l` truncation-failure mode is
+already engineered away by the `tensor & ((1<<l)-1)` reduction in `ring_truncate`, so the stochastic
+truncation is *correct* for any `l` that holds the value. The only thing `l` controls is **overflow**
+(`P < 2^(l-1)`).
+
+*Faithfulness caveat:* the sim only wraps at `ring_truncate`; all other ops stay exact int64. So it
+faithfully models a real `Z_{2^l}` machine **only while `P < 2^(l-1)`**. Below l=37 the overflow flag
+fires and the run stops representing a real dtype — those rows are **not** counted (a real narrow ring
+would wrap accumulators everywhere the sim keeps exact).
+
+**Confirmation (full 12-epoch, BITs=10 + S=2^14 + A=7):**
+
+| RING_BITS | final quant top-1 | vs baseline | max payload P | overflow flag |
+|---|---|---|---|---|
+| 57 (original) | 40.24 | +0.40 | 2^35.5 | never |
+| 40 | 40.24 | +0.40 | 2^35.5 | never |
+| 38 | 40.24 | +0.40 | 2^35.5 | never |
+| **37** | **40.24** | **+0.40** | **2^35.46** | **never** |
+| 36 | (unfaithful) | — | 2^35.5 | fires @ e4 |
+
+**The smallest faithful fixed-point representation for this training is a 37-bit ring.** P peaks at
+2^35.46 mid-training and never grows past it, so l=37 (capacity 2^36) holds ~0.5 bit of margin
+end-to-end; l=36 is the exact edge. For engineering margin, spec **38–40 bits**.
+
+**Composition of the 37 bits:**
+```
+37 bits  =  1 sign  +  10 fractional (BITs)  +  26 integer/accumulator headroom
+```
+Only **10 bits are fractional precision**; the other 26 are almost entirely **untruncated
+matmul-accumulator headroom** (`2·BITs + log2(fan_in)` during conv/linear, before truncation drops it).
+The ring is dominated by the accumulator, not by precision or by `S` — the 57-bit ring was ~20 bits
+over-provisioned. The arithmetic fits a **64-bit machine word with 27 bits to spare**.
+
+**Scope.** This is the correctness / dtype-fit minimum, from a faithful functional sim. It does **not**
+include the statistical-masking margin (κ≈40 bits) a real protocol layers on for security (§7.1) — that
+is a protocol-design axis this sim does not model. For frameworks that use the machine word as the ring
+(Z_{2^64}), the correctness bound is what decides the fit, and 37 ≪ 64.
+
+> Note: §14's 37-bit figure was measured on the **original** 3-conv network. §15 replaces the
+> architecture; its ring payload is measured in §17 (~2^41–2^44 at BITs=13, S=2^16).
+
+## 15. The BITs=8 residual is the weight grid — and a new architecture
+
+### 15.1 Per-layer grid diagnostic (original network)
+Forward softmax scaling (§13) did not clear BITs=8, so the residual limiter was localized by measuring,
+per layer after 6 epochs, the typical |value| in units of the grid step `2^-BITs` (`_grid_diag.py`).
+
+| layer | weight median steps (B10 → B8) | % weights < 4 steps (B10 → B8) |
+|---|---|---|
+| conv1 | 38 → 9.6 | 5 % → 21 % |
+| conv2 / conv3 | 8.0 → 2.0 | 25 % → 95–98 % |
+| **fc1** | 2.3 → **0.6** | 87 % → **100 %** |
+| fc2 / fc3 | 11–13 → 2.9–3.2 | 15–18 % → 62–70 % |
+
+Activations stay healthy at both BITs (medians 67–1816 steps, ≤2.7 % under 4 steps). **The BITs=8
+limiter is the weight grid**, worst in `fc1`: its median weight is 0.6 grid steps, so most of its 102.8 M
+weights round to {0, ±1 step}. That is forced by the architecture — no pooling, so a 50 176-wide flatten
+feeds `fc1`, and a fan-in of 50 176 implies weights of std ≈ 1/√50176 ≈ 0.0045 ≈ one 2^-8 step.
+
+### 15.2 New architecture (`simulate.py`)
+The model was replaced by a residual CNN + residual MLP head, built for **both** the float baseline and
+the fixed-point model from the same block code (`_ResNet(q)`), so parameter names match and
+`paired_tensors` now pairs by name (the hand-maintained `BASELINE_TO_Q` maps are gone).
+
+- stem 3×3/2 (3→64) → 3 stages of `BasicBlock`s (widths 64/128/256, downsample + 1×1 projection
+  shortcut at stage starts) → head: **global average pool** (`GLOBAL_AVG_POOL`, toggleable) →
+  fc→512 → `MLP_BLOCKS` residual 512→512 blocks → fc→100.
+- Depth knobs: `STAGE_BLOCKS` (default [2,2,2]), `STAGE_WIDTHS`, `MLP_BLOCKS` (default 2).
+- New ops are MPC-faithful: residual add = ring add (exact, free); projection = `Conv2dQ`; GAP = mean,
+  re-snapped to the grid by the next `LinearQ`'s `to_fixed`.
+- Model size: **115.5 M → 4.0 M params** at [2,2,2] (GAP removes the 102.8 M-param `fc1`).
+
+**Two bugs found and fixed while bringing it up:**
+- `Conv2dQ.backward` hard-coded `output_padding=0`, so any stride-2 conv with odd `(I+2p−k)` returned a
+  `grad_input` 1 px too small. It never fired on the old net (its one stride-2 conv was even). Now
+  computed per spatial dim from the saved input size.
+- A hand-rolled fixed-point GAP (`to_fixed`/`div_public`) **severed the autograd graph** — only the 12
+  head params received gradients. Replaced with a differentiable mean.
+
+### 15.3 Strengthening the float baseline
+The original float baseline plateaued at ~40 % top-1 (peak e9, then declining) — undertrained and
+overfitting, so the precision floors had only been validated against a weak, mildly-sharpened model.
+
+| recipe | top-1 / top-5 |
+|---|---|
+| old net, SGD lr 1e-3 flat, 12 ep | ~40.9 (peak) |
+| new net [2,2,2], lr 0.05 cosine, 25 ep | 49.6 / 77.4 |
+| **new net + augmentation, lr 0.1 cosine, 80 ep** (`augment_batch`: per-sample flip + reflect-pad crop) | |
+| — [2,2,2], 4.0 M | 70.0 / 90.5 |
+| — [3,3,3], 5.6 M | 70.8 / 90.8 |
+| — **[5,5,5], 8.7 M** | **72.2 / 91.3** |
+
+Augmentation was worth ~+20 pts; **depth gives diminishing returns** (+2.2 pts for 15→33 conv layers,
+2.2× params). For reference, vanilla from-scratch ResNets reach ~72–78 % on CIFAR-100 and strong
+from-scratch recipes ~85–91 %, so this is a sound but not state-of-the-art reference.
+
+## 16. Converged-model sweep — higher fractional precision trains *worse*
+
+### 16.1 First observation (confounded)
+[2,2,2], lr 0.05 cosine, 25 ep, no augmentation, `A = log2 S − 7` (`_sweep_resnet.py`):
+
+| config | final quant top-1 | vs baseline 49.57 |
+|---|---|---|
+| BITs=13, S=2^12, A=5 | 42.91 | −6.7 |
+| BITs=10, S=2^14, A=7 | 42.00 | −7.6 |
+| BITs=8, S=2^16, A=9 | **49.82** | **+0.25** |
+
+BITs=8 matched float; 13 and 10 fell ~7 pts behind. But S and A co-varied with BITs, so this could not
+separate bits from scaling.
+
+**Metric note.** At lr 0.05–0.1 param-RMSE reaches 100–150 % for *every* config, including the ones
+that match float accuracy. The fixed-point and float trajectories decorrelate in weight space while
+both reach good minima, so **param-RMSE stops being a fidelity proxy at high LR**; the top-1 gap is the
+metric from here on.
+
+### 16.2 Controlled sweep — scaling held fixed, BITs the only variable
+[5,5,5], augmentation, lr 0.1 cosine, 80 ep; **S=2^16 and A=9 for all three**; quant runs serially on
+one GPU against one shared float reference (`_baseline_snapshot.py` → `_quant_converged.py`).
+Float baseline: 72.18 % best (e77).
+
+| epoch | BITs=13 gap | BITs=10 gap | BITs=8 gap |
+|---|---|---|---|
+| e19 | +3.63 | +4.14 | +3.22 |
+| e39 | +4.39 | +3.45 | +2.27 |
+| e49 | +1.60 | +0.92 | +0.24 |
+| e59 | −0.44 | +0.08 | −1.19 |
+| e69 | −7.55 | −5.55 | −0.95 |
+| e79 | −12.68 | −10.33 | −1.02 |
+| **final top-1** | **60.28** | **62.31** | **70.82** |
+
+0 nonfinite in every epoch of every run.
+
+**Findings.**
+- **8-bit fixed-point training reaches 70.8 % against a 72.2 % float model (−1.4 pts final; −1.0 at
+  e79).** On a properly trained network the quantized model predicts well.
+- **The inversion survives with scaling held fixed:** fractional bits alone drives it, and fewer is
+  better. This refutes the §16.1 hypothesis that S/A were responsible.
+- All three runs lead the float model by +2 to +5 pts through ~e40. The split happens entirely in the
+  cosine-decay phase (e60–e80): float climbs 64 → 72, BITs=8 climbs with it, while BITs=13/10 **lose**
+  accuracy (13: ~64 → 59). That is active degradation, not a plateau.
+- This is not a known precision law — Kumar et al., *Scaling Laws for Precision* (ICLR 2025), have loss
+  *rising* as precision drops — so it points to an interaction specific to this training setup (§17).
+
+## 17. Mechanism investigation — gradients, overflow, and the decay phase
+
+**Hypothesis tested.** Skip connections and the larger model keep gradients from vanishing, so the
+S-lifted gradient (`grad × 2^16`) flowing back through the residual sums grows large. At higher BITs
+(base scale 2^BITs) that could push the ring payload to the ceiling and wrap silently — worse at higher
+bits, and late in training.
+
+**Instrumented re-run** (`_instrument_grad.py`, BITs=13, same config as §16.2, 65 epochs; ring payload
+via an on-GPU running max into `ring_truncate`; gradient stats sampled once per epoch on the last
+batch, so they are noisy):
+
+| epoch | gap | ring payload | S-lifted grad max | true grad max | stem grad-norm | head grad-norm |
+|---|---|---|---|---|---|---|
+| e1 | +0.14 | 2^41.6 | 2^13.1 | 0.13 | 0.27 | 0.57 |
+| e15 | +8.85 | 2^43.2 | 2^12.8 | 0.11 | 0.39 | 0.66 |
+| e34 | +2.73 | 2^43.0 | 2^12.7 | 0.10 | 0.40 | 0.70 |
+| e55 | +0.47 | 2^43.8 | 2^13.1 | 0.14 | 0.55 | 0.79 |
+| e59 | −0.44 | 2^43.9 | 2^13.8 | 0.21 | 0.35 | 0.83 |
+| e63 | −3.25 | 2^45.2 | 2^14.2 | 0.29 | 0.82 | 1.10 |
+| e65 | −4.33 | 2^46.4 | 2^15.6 | 0.76 | 0.45 | 2.06 |
+
+The divergence reproduced (onset ~e59), despite the stochastic truncation — consistent with §16.2.
+
+**Findings.**
+- **Gradients do not vanish (hypothesis premise confirmed).** The stem (deepest backprop) grad-norm
+  stays the same order as the head's (~0.3–0.8 vs ~0.5–0.8) throughout.
+- **Ring overflow is ruled out.** The payload peaks at 2^46.4 at e65, ~10 bits under the 2^56 ceiling,
+  and the overflow flag never fires. It sits flat at ~2^43–44 until the collapse starts; its late rise
+  tracks the gradient growth rather than preceding it.
+- **Gradients grow sharply as accuracy collapses** — true grad max ~0.1 → 0.76, head grad-norm ~0.6 →
+  2.1, S-lifted max 2^13 → 2^15.6 between e55 and e65. That is the opposite of a converging model, whose
+  gradients should shrink as LR decays.
+
+**Literature.** Defazio, *Why Gradients Rapidly Increase Near the End of Training* (arXiv 2506.02285,
+2025) shows that with **normalization layers + weight decay + a decaying LR schedule**, the
+gradient-norm / weight-norm ratio tracks an equilibrium that rises as LR falls, so gradient norms
+**spike near the end of a cosine schedule**. Their fix is LR-proportional weight decay. This net has all
+three ingredients (BatchNorm, wd 5e-4, cosine). Related mixed-precision practice: a *fixed* loss scale
+overflows once gradients grow, which is why dynamic loss scaling backs the scale off on overflow
+(Micikevicius et al., *Mixed Precision Training*, ICLR 2018). Here overflow does not occur, so that
+failure mode is not the cause.
+
+**Current read.**
+1. Late-training gradient growth is real and has a known, generic cause (BN + WD + cosine). The float
+   baseline should see it too — **its gradient trajectory was not measured**, so whether the
+   fixed-point gradients grow *more* than float's (a cause) or merely reflect the degradation (a
+   consequence) is open.
+2. The bits-dependence is still unexplained. Leading hypothesis — **the weight grid as an update
+   deadband**: weights are full-precision but rounded to `2^-BITs` on every forward. Early, `lr·grad`
+   far exceeds a grid step, so rounding is irrelevant. Late, as cosine drives `lr·grad` down, the coarse
+   2^-8 grid swallows most updates (rounded weights freeze at the converged solution), while the fine
+   2^-13 grid still lets small, noise-dominated, momentum-carried updates cross grid boundaries, so the
+   rounded weights keep moving and the model drifts. This fits the timing and the direction; it is not
+   yet confirmed.
+
+**Next steps.**
+- **Deadband test:** per epoch, the fraction of rounded weights `w_q` that change. Prediction: falls
+  toward 0 in the decay phase at BITs=8, stays high at BITs=13.
+- **Float control:** the same gradient instrumentation on the float baseline, to separate the generic
+  BN/WD/cosine spike from a fixed-point-specific one.
+- **Cheap candidate fix:** LR-proportional weight decay (Defazio 2025) at BITs=13 — if the late spike is
+  what destabilises the finer grid, removing it should rescue BITs=13.
+
+## 18. Deadband test — the rounded weights freeze at 8 bits, while 13-bit's updates grow
+
+`_deadband.py`, same config as §16.2 (BITs 8 and 13, 80 epochs, one GPU each). Every 50 batches it
+logs `step_chg` (fraction of rounded weights `round(w·2^BITs)` changed by one optimizer step) and
+`upd_med` (median |Δw| per step in grid steps, from 2 M sampled weights). At the end of each epoch it
+logs `epoch_chg` (fraction of rounded weights changed over the epoch). The collapse reproduced: final
+gaps were −1.05 (BITs=8) and −11.04 (BITs=13), the third BITs=13 run to diverge from ~e60.
+
+| epoch | lr | gap 8 / 13 | step_chg 8 / 13 | epoch_chg 8 / 13 | update/lr, 2^-13 units, 8 / 13 |
+|---|---|---|---|---|---|
+| e1 | 0.100 | +1.40 / +0.15 | 0.72 % / 21.5 % | 66 % / 99 % | 1.3 / 1.3 |
+| e40 | 0.052 | +2.09 / +3.41 | 1.61 % / 38.8 % | 57 % / 89 % | 5.5 / 5.2 |
+| e50 | 0.033 | +1.04 / +2.18 | 1.30 % / 34.7 % | 54 % / 88 % | 7.8 / 7.3 |
+| e60 | 0.016 | −0.83 / −1.29 | 0.81 % / 24.3 % | 43 % / 87 % | 9.9 / 9.8 |
+| e65 | 0.0095 | −1.77 / −5.52 | 0.47 % / 22.1 % | 31 % / 87 % | 10.1 / 14.7 |
+| e70 | 0.0046 | −0.97 / −7.08 | 0.16 % / 15.4 % | 12 % / 87 % | ~7 / 18.7 |
+| e75 | 0.0014 | −0.88 / −14.87 | 0.03 % / 12.0 % | 2.6 % / 84 % | — / 40.7 |
+| e78 | 0.0003 | −1.05 / −13.00 | 0.007 % / 4.6 % | 0.6 % / 76 % | — / 66.7 |
+
+The last column is `upd_med / lr`, rescaled so the two runs are comparable (8-bit × 32). Since
+|Δw| ≈ lr·|momentum buffer|, it measures the typical gradient magnitude. 8-bit values after e70 are
+below the log's 3-decimal resolution.
+
+**Findings.**
+- **Through ~e60 the two runs move identically.** The per-step update magnitude matches to within a few
+  percent, so the 32× difference in `step_chg` is purely the grid ratio. Both grow ~8× from e1 to e60
+  at near-constant LR, consistent with the BN + WD effective-LR growth (§17, Defazio 2025).
+- **After e60 they split.** At BITs=8 the gradient magnitude stays flat (~10) and the rounded weights
+  freeze as LR decays: `epoch_chg` falls 43 % → 0.07 %. At BITs=13 the gradient magnitude grows
+  **~7×** (9.8 → 67) as accuracy collapses, so `epoch_chg` stays above 75 % until the last 2 epochs.
+- **So the late-freeze half of the deadband hypothesis holds (8-bit freezes), but the grid ratio
+  alone does not explain 13-bit's failure.** With its e60 gradient magnitude, 13-bit would also have
+  calmed down. What distinguishes it is gradient growth that 8-bit does not show. Note that in this sim
+  the master weights are float64, so the grid is not a true deadband: every update still lands in the
+  master weight. Rounding only perturbs what the forward pass sees.
+- **Open question: is 13-bit's growth abnormal, or is 8-bit's flatness?** Defazio predicts a late
+  gradient spike in a float model with this recipe, and the float baseline's gradients have not been
+  measured. Next: the float gradient control, plus a per-layer check of fixed-point vs float gradients
+  at identical weights (BITs 8/10/13) to rule out a systematic gradient error.
+
+---
+
 ### Artifacts
 - `_sweep_bits.py` — coarse sweep (7→22)
 - `_noise_probe.py` — per-op injected-noise SNR + inverse-sqrt underflow map (§8)
@@ -820,5 +1149,24 @@ BITs=10 floor after wiring in the fixed-point softmax (§11.1).
 - `_sweep_AplusS.py` — full-epoch Method-A + loss-scaling sweep, real top-1 (§10)
 - `_sweep_extra.py` / `_sweep_extra8.py` — `EXTRA = B_IV−BITs` sweep at BITs=10 / BITs=8 (§10)
 - `_multiepoch_check.py` — 12-epoch fidelity for BITs∈{13,10,8}+S (§10)
+- `_multiepoch_ceq_fwd.py` — 12-epoch fidelity with forward softmax scaling `A=log2 S−7`, BITs 13→6 (§13)
+- `_peak_check.py` — global int→float64 payload-peak certainty check vs 2^53 (§14)
+- `_ring_sweep.py` — `RING_BITS` sweep locating the overflow cliff at BITs=10 (§14)
+- `_ring_confirm.py` — full 12-epoch confirmation at RING_BITS∈{40,38,37} (§14)
+- `_grid_diag.py` — per-layer activation/weight grid-step diagnostic, BITs 10 vs 8 (§15.1)
+- `_multiepoch_resnet.py` — first fidelity check of the residual architecture, BITs=10, 6 ep (§15.2)
+- `_strengthen_baseline.py` — float baseline with augmentation, depth sweep [2,2,2]/[3,3,3]/[5,5,5] (§15.3)
+- `_sweep_resnet.py` — converged-model sweep, lr 0.05 cosine 25 ep, S/A co-varied (§16.1)
+- `_baseline_snapshot.py` → shared [5,5,5] float reference (per-epoch acc + final params) (§16.2)
+- `_quant_converged.py <BITS> <snapshot>` — one quant config, aug + lr 0.1 cosine 80 ep, S=2^16 A=9 (§16.2)
+- `_instrument_grad.py <BITS> <snapshot>` — per-epoch ring payload, S-lifted/true grad max, stem/head
+  grad norm through the divergence (§17)
+- `_deadband.py <BITS> <snapshot> [EPOCHS]` — per-step/per-epoch rounded-weight change fraction and
+  update size in grid steps (§18)
+
+**Code knobs added:** `SOFTMAX_EXTRA_BITS` (forward softmax scale `A`, default 0, §13), `RING_BITS`
+(ring bit-width, default 57, §14), `GLOBAL_AVG_POOL` (default True), `STAGE_BLOCKS` / `STAGE_WIDTHS` /
+`MLP_BLOCKS` (depth, §15.2), and `augment_batch` (on-GPU train-time augmentation, §15.3) in
+`simulate.py`. The two §13/§14 knobs are inert at their defaults.
 
 **Recommendations, code-change log, and open TODOs:** see `RECOMMENDATIONS.md`.
