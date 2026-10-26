@@ -1,0 +1,22 @@
+BS baseline [5,5,5] 8.66M  aug lr=0.1 cosine 80 ep
+BS e1   | t1  7.07 / t5 27.08 | 11s
+BS e5   | t1 30.54 / t5 63.02 | 11s
+BS e10  | t1 41.06 / t5 72.21 | 9s
+BS e15  | t1 47.43 / t5 78.89 | 10s
+BS e20  | t1 51.34 / t5 81.35 | 10s
+BS e25  | t1 50.37 / t5 80.23 | 10s
+BS e30  | t1 53.58 / t5 82.48 | 10s
+BS e35  | t1 56.08 / t5 84.12 | 10s
+BS e40  | t1 57.14 / t5 84.50 | 10s
+BS e45  | t1 59.48 / t5 85.64 | 10s
+BS e50  | t1 60.54 / t5 86.15 | 7s
+BS e55  | t1 62.81 / t5 87.10 | 10s
+BS e60  | t1 64.54 / t5 87.96 | 10s
+BS e65  | t1 67.98 / t5 90.26 | 10s
+BS e70  | t1 70.72 / t5 91.26 | 10s
+BS e75  | t1 71.51 / t5 91.33 | 10s
+BS e78  | t1 71.85 / t5 91.43 | 10s
+BS e79  | t1 71.70 / t5 91.40 | 10s
+BS e80  | t1 71.68 / t5 91.40 | 10s
+BS best t1 71.85 (e78) -> saved /home/ryan/checkpoints/baseline_555_s1.pt
+BS DONE

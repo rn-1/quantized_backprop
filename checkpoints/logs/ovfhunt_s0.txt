@@ -1,0 +1,88 @@
+QC SEED=0 RECIP_NEWTON=1 ISQRT_NEWTON=1 BN_EARLY_DIV_BITS=5 RING_BITS=32 DIV_PUBLIC_RING=1 LIN_GRAD_PRESHIFT=2
+QC FXOPT=1 F_W=20 F_V=16 BN_STATS_F=16
+QC BITs=8 S=2^16 A=9 [5,5,5] aug lr=0.1 cosine 80 ep  (8.66M params)
+QC ep | base t1/t5 | quant t1/t5 | t1 gap | nonfin | sec | payload | batch-stat t1 (old protocol)
+QC e1   |  7.08/27.27 |  6.26/23.38 | -0.82 | 0 | 378 | 2^29.75 |  6.61
+SITETOP e1 2^29.755 m=6 backward:705
+SITETOP e1 2^29.187 m=8 backward:635
+SITETOP e1 2^28.678 m=11 div_public:327 < backward:1160
+SITETOP e1 2^27.236 m=22 mul_public_const:1380 < step:1433
+SITETOP e1 2^26.273 m=8 backward:979
+SITETOP e1 2^25.068 m=8 forward:791 < forward:1233 < forward:1277 < forward:1348
+SITETOP e1 2^25.000 m=8 forward:1111 < cross_entropy_q:1175
+SITETOP e1 2^24.889 m=8 backward:976
+QC e2   | 12.29/35.89 |  8.93/30.29 | -3.36 | 0 | 377 | 2^28.71 | 10.95
+SITETOP e2 2^28.713 m=8 backward:635
+SITETOP e2 2^28.678 m=11 div_public:327 < backward:1160
+SITETOP e2 2^28.068 m=6 backward:705
+SITETOP e2 2^27.528 m=8 backward:979
+SITETOP e2 2^27.394 m=22 mul_public_const:1380 < step:1433
+SITETOP e2 2^26.480 m=8 backward:976
+SITETOP e2 2^25.321 m=8 backward:924
+SITETOP e2 2^25.208 m=8 forward:791 < forward:1233 < forward:1277 < forward:1348
+QC e3   | 17.23/45.43 | 15.39/43.05 | -1.84 | 0 | 377 | 2^28.68 | 15.71
+SITETOP e3 2^28.679 m=11 div_public:327 < backward:1160
+SITETOP e3 2^28.528 m=8 backward:635
+SITETOP e3 2^27.632 m=6 backward:705
+SITETOP e3 2^27.470 m=22 mul_public_const:1380 < step:1433
+SITETOP e3 2^26.298 m=8 forward:520 < forward:1221 < forward:1278 < forward:1348
+SITETOP e3 2^26.124 m=8 backward:976
+SITETOP e3 2^25.753 m=8 backward:968
+SITETOP e3 2^25.581 m=8 backward:979
+SITE e4 b293 2^30.331 m=8 backward:635
+QC e4   | 21.36/52.39 | 20.29/50.86 | -1.07 | 0 | 378 | 2^30.33 | 20.19
+SITETOP e4 2^30.331 m=8 backward:635
+SITETOP e4 2^28.679 m=11 div_public:327 < backward:1160
+SITETOP e4 2^27.752 m=8 backward:976
+SITETOP e4 2^27.717 m=6 backward:705
+SITETOP e4 2^27.489 m=22 mul_public_const:1380 < step:1433
+SITETOP e4 2^27.446 m=8 backward:979
+SITETOP e4 2^25.708 m=8 backward:924
+SITETOP e4 2^25.542 m=8 backward:968
+SITE e5 b92 2^30.004 m=8 backward:635
+SITE e5 b182 2^30.752 m=8 backward:635
+QC e5   | 23.10/53.20 | 22.95/53.70 | -0.15 | 0 | 377 | 2^30.75 | 25.52
+SITETOP e5 2^30.752 m=8 backward:635
+SITETOP e5 2^29.374 m=8 backward:976
+SITETOP e5 2^29.275 m=8 backward:979
+SITETOP e5 2^28.678 m=11 div_public:327 < backward:1160
+SITETOP e5 2^28.229 m=8 backward:924
+SITETOP e5 2^27.833 m=22 mul_public_const:1380 < step:1433
+SITETOP e5 2^27.767 m=6 backward:705
+SITETOP e5 2^27.487 m=8 backward:968
+SITE e6 b1 2^30.176 m=8 backward:635
+SITE e6 b52 2^30.159 m=8 backward:635
+SITE e6 b235 2^30.046 m=8 backward:635
+SITE e6 b376 2^30.046 m=8 backward:635
+QC e6   | 31.14/63.47 | 24.90/56.67 | -6.24 | 0 | 377 | 2^30.18 | 28.25
+SITETOP e6 2^30.176 m=8 backward:635
+SITETOP e6 2^28.679 m=11 div_public:327 < backward:1160
+SITETOP e6 2^28.317 m=8 backward:976
+SITETOP e6 2^28.077 m=8 backward:979
+SITETOP e6 2^27.855 m=22 mul_public_const:1380 < step:1433
+SITETOP e6 2^27.741 m=6 backward:705
+SITETOP e6 2^27.203 m=8 backward:924
+SITETOP e6 2^27.146 m=8 backward:968
+QC e7   | 32.70/65.16 | 31.25/64.38 | -1.45 | 0 | 377 | 2^29.93 | 33.37
+SITETOP e7 2^29.928 m=8 backward:635
+SITETOP e7 2^28.692 m=8 backward:924
+SITETOP e7 2^28.679 m=11 div_public:327 < backward:1160
+SITETOP e7 2^28.619 m=8 backward:979
+SITETOP e7 2^28.550 m=8 backward:976
+SITETOP e7 2^27.898 m=22 mul_public_const:1380 < step:1433
+SITETOP e7 2^27.780 m=6 backward:705
+SITETOP e7 2^27.692 m=8 backward:968
+SITE e8 b8 2^31.235 m=8 backward:979 OVF
+SITE e8 b338 2^30.466 m=8 backward:635
+QC e8   | 36.69/69.97 | 33.30/66.19 | -3.39 | 0 | 377 | 2^31.23 OVF | 35.11
+SITETOP e8 2^31.235 m=8 backward:979
+SITETOP e8 2^30.466 m=8 backward:635
+SITETOP e8 2^29.663 m=8 backward:976
+SITETOP e8 2^29.395 m=8 backward:924
+SITETOP e8 2^28.678 m=11 div_public:327 < backward:1160
+SITETOP e8 2^28.415 m=8 backward:968
+SITETOP e8 2^28.009 m=6 backward:705
+SITETOP e8 2^27.812 m=22 mul_public_const:1380 < step:1433
+QC STOP after e8 (QC_EPOCHS)
+QC summary BITs=8: final quant t1 33.30 (base best 72.18) paramRMSE 125.1%
+QC DONE

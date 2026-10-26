@@ -1,0 +1,42 @@
+MM blocks=[2, 2, 2] f=8 LS=0 (S=2^7) A=0 lr=0.05 const, mom 0.9, wd 0, no aug, F_W=F_V=f
+MM e1 b50 loss50 4.6220
+MM e1 b100 loss50 4.5572
+MM e1 b150 loss50 4.6821
+MM e1 b200 loss50 4.6618
+MM e1 b250 loss50 4.6697
+MM e1 b300 loss50 4.6844
+MM e1 b350 loss50 4.6871
+MM e1 | mean train loss 4.6551 | test t1 1.00 | 137s
+MM e2 b50 loss50 4.6841
+MM e2 b100 loss50 4.6820
+MM e2 b150 loss50 4.6950
+MM e2 b200 loss50 4.6813
+MM e2 b250 loss50 4.6938
+MM e2 b300 loss50 4.6736
+MM e2 b350 loss50 4.6900
+MM e2 | mean train loss 4.6853 | test t1 1.00 | 136s
+MM e3 b50 loss50 4.6923
+MM e3 b100 loss50 4.7042
+MM e3 b150 loss50 4.6904
+MM e3 b200 loss50 4.6842
+MM e3 b250 loss50 4.6916
+MM e3 b300 loss50 4.6961
+MM e3 b350 loss50 4.6942
+MM e3 | mean train loss 4.6933 | test t1 1.00 | 136s
+MM e4 b50 loss50 4.6961
+MM e4 b100 loss50 4.6934
+MM e4 b150 loss50 4.6891
+MM e4 b200 loss50 4.6893
+MM e4 b250 loss50 4.6906
+MM e4 b300 loss50 4.6862
+MM e4 b350 loss50 4.6982
+MM e4 | mean train loss 4.6914 | test t1 1.00 | 136s
+MM e5 b50 loss50 4.6911
+MM e5 b100 loss50 4.6887
+MM e5 b150 loss50 4.6911
+MM e5 b200 loss50 4.6856
+MM e5 b250 loss50 4.6982
+MM e5 b300 loss50 4.6991
+MM e5 b350 loss50 4.6957
+MM e5 | mean train loss 4.6927 | test t1 1.00 | 136s
+MM DONE

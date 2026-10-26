@@ -1,0 +1,198 @@
+Default bit length for compilation: 63
+Default security parameter for compilation: 40
+Compiling file Programs/Source/resnet_train.mpc
+train (50000, 32, 32, 3) test (10000, 32, 32, 3)
+Writing binary data to Player-Data/Input-Binary-P0-0
+[x, stem_conv, stem_bn, relu, stages_0_0_conv1, stages_0_0_bn1, stages_0_0_relu, stages_0_0_conv2, stages_0_0_bn2, add, stages_0_0_relu_1, stages_0_1_conv1, stages_0_1_bn1, stages_0_1_relu, stages_0_1_conv2, stages_0_1_bn2, add_1, stages_0_1_relu_1, stages_1_0_conv1, stages_1_0_bn1, stages_1_0_relu, stages_1_0_conv2, stages_1_0_bn2, stages_1_0_down_conv, stages_1_0_down_bn, add_2, stages_1_0_relu_1, stages_1_1_conv1, stages_1_1_bn1, stages_1_1_relu, stages_1_1_conv2, stages_1_1_bn2, add_3, stages_1_1_relu_1, stages_2_0_conv1, stages_2_0_bn1, stages_2_0_relu, stages_2_0_conv2, stages_2_0_bn2, stages_2_0_down_conv, stages_2_0_down_bn, add_4, stages_2_0_relu_1, stages_2_1_conv1, stages_2_1_bn1, stages_2_1_relu, stages_2_1_conv2, stages_2_1_bn2, add_5, stages_2_1_relu_1, pool, flatten, head_fc0, relu_1, mlp_0_fc1, mlp_0_relu, mlp_0_fc2, add_6, mlp_0_relu_1, mlp_1_fc1, mlp_1_relu, mlp_1_fc2, add_7, mlp_1_relu_1, head_fc_out, output]
+First layer check: layer.args=(x,), torch_layers[i]=x
+shapes [[64, 3, 3, 3]] [64, 3, 3, 3]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 64]] [128, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 128]] [128, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[128, 1, 1, 64]] [128, 1, 1, 64]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 128]] [128, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 128]] [128, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 128]] [256, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 256]] [256, 3, 3, 256]
+Approximate square root inverse in batch normalization
+shapes [[256, 1, 1, 128]] [256, 1, 1, 128]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 256]] [256, 3, 3, 256]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 256]] [256, 3, 3, 256]
+Approximate square root inverse in batch normalization
+(512, 256)
+(512, 256, 1, 1)
+(512, 1, 1, 256)
+(512, 256)
+Setting learning rate to 0.01
+Using SGD
+Setting learning rate to 0.05
+391 runs per epoch
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-1-50-32-multithread-2.bc
+WARNING: Probabilistic truncation leaks some information, see https://eprint.iacr.org/2024/1127 for discussion. Use 'sfix.round_nearest = True' to deactivate this for fixed-point operations.
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-1-50-32-TruncPr(1000)_39_8-4.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-1-50-32-TruncPr(536)_39_8-6.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-1-50-32-multithread-3.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-1-50-32-FixConv2d-forward-1.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-1-50-32-multithread-8.bc
+Traceback (most recent call last):
+  File "/home/ryan/mp-spdz-0.4.3/compile.py", line 41, in <module>
+    main(compiler)
+  File "/home/ryan/mp-spdz-0.4.3/compile.py", line 36, in main
+    compilation(compiler)
+  File "/home/ryan/mp-spdz-0.4.3/compile.py", line 19, in compilation
+    prog = compiler.compile_file()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/compilerLib.py", line 537, in compile_file
+    exec(compile(infile.read(), infile.name, "exec"), self.VARS)
+  File "Programs/Source/resnet_train.mpc", line 51, in <module>
+    opt.fit(train_x, train_y, epochs=epochs, batch_size=128, validation_data=(test_x, test_y),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 3903, in fit
+    self.run_by_args(program, epochs, batch_size, *validation_data,
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 203, in wrapper
+    res = function(*args, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 3817, in run_by_args
+    def _(i):
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 976, in decorator
+    range_loop(loop_body, start, stop, step, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 942, in range_loop
+    while_loop(loop_fn, condition, start, g=loop_body.__globals__, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1586, in while_loop
+    if_statement(pre_condition, lambda: do_while(loop_fn, g=g),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1749, in if_statement
+    if_fn()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1586, in <lambda>
+    if_statement(pre_condition, lambda: do_while(loop_fn, g=g),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1668, in do_while
+    condition = _run_and_link(loop_fn, g, allow_return=True)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1627, in _run_and_link
+    res = function()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1580, in loop_fn
+    result = loop_body(arg)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 932, in loop_fn
+    res = loop_body(i)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 3821, in _
+    self.run(batch_size,
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 203, in wrapper
+    res = function(*args, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 3609, in run
+    def _(_):
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 976, in decorator
+    range_loop(loop_body, start, stop, step, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 942, in range_loop
+    while_loop(loop_fn, condition, start, g=loop_body.__globals__, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1586, in while_loop
+    if_statement(pre_condition, lambda: do_while(loop_fn, g=g),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1749, in if_statement
+    if_fn()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1586, in <lambda>
+    if_statement(pre_condition, lambda: do_while(loop_fn, g=g),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1668, in do_while
+    condition = _run_and_link(loop_fn, g, allow_return=True)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1627, in _run_and_link
+    res = function()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1580, in loop_fn
+    result = loop_body(arg)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 932, in loop_fn
+    res = loop_body(i)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 3633, in _
+    def _(j):
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 976, in decorator
+    range_loop(loop_body, start, stop, step, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 942, in range_loop
+    while_loop(loop_fn, condition, start, g=loop_body.__globals__, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1586, in while_loop
+    if_statement(pre_condition, lambda: do_while(loop_fn, g=g),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1749, in if_statement
+    if_fn()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1586, in <lambda>
+    if_statement(pre_condition, lambda: do_while(loop_fn, g=g),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1668, in do_while
+    condition = _run_and_link(loop_fn, g, allow_return=True)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1627, in _run_and_link
+    res = function()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1580, in loop_fn
+    result = loop_body(arg)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 932, in loop_fn
+    res = loop_body(i)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 3641, in _
+    self.forward(batch=batch, training=True)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 203, in wrapper
+    res = function(*args, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 3397, in forward
+    layer.forward(batch=self.batch_for(layer, batch),
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 216, in wrapper
+    res = function(self, *args, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 630, in wrapper
+    res = tapes[key](*(members + args), **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 468, in __call__
+    self.on_first_call(wrapped_function, key, my_args)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 478, in on_first_call
+    assert tape_handle == program.new_tape(
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 393, in new_tape
+    function(*args)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 461, in wrapped_function
+    self.result = self.function(*actual_call_args,
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 611, in f
+    res = function(dummy, *real_args, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/ml.py", line 1685, in forward
+    def _(base, size):
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 1398, in decorator
+    tape = prog.new_tape(f, (0,), 'multithread')
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 395, in new_tape
+    self.finalize_tape(self.curr_tape)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 518, in finalize_tape
+    tape.optimize(self.options)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 1189, in wrapper
+    return function(self, *args, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 1279, in optimize
+    self.expand_cisc()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 1189, in wrapper
+    return function(self, *args, **kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 1445, in expand_cisc
+    expanded = block.expand_cisc()
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 1110, in expand_cisc
+    inst.expand_merged(skip)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/instructions_base.py", line 654, in expand_merged
+    new_regs = self.expand_chunk(size, new_regs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/instructions_base.py", line 686, in expand_chunk
+    self.expand_to_tape(size, new_regs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/instructions_base.py", line 613, in expand_to_tape
+    res = util.tuplify(f(*(arg.load() for arg in in_args)))
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 468, in __call__
+    self.on_first_call(wrapped_function, key, my_args)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 478, in on_first_call
+    assert tape_handle == program.new_tape(
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/program.py", line 393, in new_tape
+    function(*args)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 461, in wrapped_function
+    self.result = self.function(*actual_call_args,
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/instructions_base.py", line 607, in f
+    self.new_instructions(size, my_args)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/instructions_base.py", line 510, in new_instructions
+    self.function(*args, **self.kwargs)
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/instructions_base.py", line 747, in instruction
+    res.mov(res, function(*args, **kwargs))
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/library.py", line 2145, in FPDiv
+    comparison.require_ring_size(
+  File "/home/ryan/mp-spdz-0.4.3/Compiler/comparison.py", line 85, in require_ring_size
+    raise CompilerError(msg + suffix)
+Compiler.exceptions.CompilerError: ring size too small for division, compile with '-R 71' or more (maybe '-R 128' as it is supported by default) or consider reducing k in 'sfix.precision(f, k)'
+
+real	0m16.848s
+user	0m53.372s
+sys	0m6.940s

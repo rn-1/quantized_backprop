@@ -1,0 +1,1 @@
+seed 1 stored 68.80 batch 70.28 recal 70.62 fold16_recal 70.38 fold16_stored 0.93

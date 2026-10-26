@@ -1,0 +1,22 @@
+BS baseline [5,5,5] 8.66M  aug lr=0.1 cosine 80 ep
+BS e1   | t1  7.08 / t5 27.27 | 9s
+BS e5   | t1 23.10 / t5 53.20 | 9s
+BS e10  | t1 39.08 / t5 71.13 | 11s
+BS e15  | t1 41.61 / t5 72.38 | 11s
+BS e20  | t1 49.44 / t5 79.65 | 10s
+BS e25  | t1 53.82 / t5 82.83 | 11s
+BS e30  | t1 54.10 / t5 83.41 | 10s
+BS e35  | t1 57.93 / t5 85.09 | 11s
+BS e40  | t1 56.92 / t5 84.67 | 11s
+BS e45  | t1 59.01 / t5 86.20 | 10s
+BS e50  | t1 60.74 / t5 86.66 | 10s
+BS e55  | t1 63.21 / t5 87.87 | 10s
+BS e60  | t1 65.68 / t5 89.05 | 10s
+BS e65  | t1 68.65 / t5 90.00 | 10s
+BS e70  | t1 70.89 / t5 91.15 | 10s
+BS e75  | t1 71.76 / t5 91.49 | 10s
+BS e78  | t1 72.01 / t5 91.28 | 10s
+BS e79  | t1 71.98 / t5 91.34 | 10s
+BS e80  | t1 71.97 / t5 91.36 | 10s
+BS best t1 72.18 (e77) -> saved /tmp/claude-1008/-home-ryan/724bb58d-4782-4c02-9f63-01557aa1984b/scratchpad/baseline_555.pt
+BS DONE

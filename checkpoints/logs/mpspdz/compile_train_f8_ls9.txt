@@ -1,0 +1,1037 @@
+Default bit length for compilation: 127
+Default security parameter for compilation: 40
+Compiling file Programs/Source/resnet_train.mpc
+train (50000, 32, 32, 3) test (10000, 32, 32, 3)
+Writing binary data to Player-Data/Input-Binary-P0-0
+[x, stem_conv, stem_bn, relu, stages_0_0_conv1, stages_0_0_bn1, stages_0_0_relu, stages_0_0_conv2, stages_0_0_bn2, add, stages_0_0_relu_1, stages_0_1_conv1, stages_0_1_bn1, stages_0_1_relu, stages_0_1_conv2, stages_0_1_bn2, add_1, stages_0_1_relu_1, stages_1_0_conv1, stages_1_0_bn1, stages_1_0_relu, stages_1_0_conv2, stages_1_0_bn2, stages_1_0_down_conv, stages_1_0_down_bn, add_2, stages_1_0_relu_1, stages_1_1_conv1, stages_1_1_bn1, stages_1_1_relu, stages_1_1_conv2, stages_1_1_bn2, add_3, stages_1_1_relu_1, stages_2_0_conv1, stages_2_0_bn1, stages_2_0_relu, stages_2_0_conv2, stages_2_0_bn2, stages_2_0_down_conv, stages_2_0_down_bn, add_4, stages_2_0_relu_1, stages_2_1_conv1, stages_2_1_bn1, stages_2_1_relu, stages_2_1_conv2, stages_2_1_bn2, add_5, stages_2_1_relu_1, pool, flatten, head_fc0, relu_1, mlp_0_fc1, mlp_0_relu, mlp_0_fc2, add_6, mlp_0_relu_1, mlp_1_fc1, mlp_1_relu, mlp_1_fc2, add_7, mlp_1_relu_1, head_fc_out, output]
+First layer check: layer.args=(x,), torch_layers[i]=x
+shapes [[64, 3, 3, 3]] [64, 3, 3, 3]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[64, 3, 3, 64]] [64, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 64]] [128, 3, 3, 64]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 128]] [128, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[128, 1, 1, 64]] [128, 1, 1, 64]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 128]] [128, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[128, 3, 3, 128]] [128, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 128]] [256, 3, 3, 128]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 256]] [256, 3, 3, 256]
+Approximate square root inverse in batch normalization
+shapes [[256, 1, 1, 128]] [256, 1, 1, 128]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 256]] [256, 3, 3, 256]
+Approximate square root inverse in batch normalization
+shapes [[256, 3, 3, 256]] [256, 3, 3, 256]
+Approximate square root inverse in batch normalization
+(512, 256)
+(512, 256, 1, 1)
+(512, 1, 1, 256)
+(512, 256)
+Setting learning rate to 0.01
+Using SGD
+Setting learning rate to 0.05
+391 runs per epoch
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-2.bc
+WARNING: Probabilistic truncation leaks some information, see https://eprint.iacr.org/2024/1127 for discussion. Use 'sfix.round_nearest = True' to deactivate this for fixed-point operations.
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1000)_39_8-4.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(536)_39_8-6.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-3.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-1.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-8.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FPDiv(2)_31_8-10.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-9.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(64)_39_8-13.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-12.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-14.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1600)_39_8-16.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1536)_39_8-17.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-15.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(256)_38_7-18.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-sqrt(64)_31_8-20.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FPDiv(64)_31_8-22.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-7.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(1000)_32-26.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(536)_32-28.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-25.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-24.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-30.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-31.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-29.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-33.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-34.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-35.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-36.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-37.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-32.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-39.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-40.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-41.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-42.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-43.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-38.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-45.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-44.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-47.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-48.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-49.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-50.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-51.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-46.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-53.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-54.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-55.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-56.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-57.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-52.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-59.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-58.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-61.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(768)_39_8-63.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-62.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-60.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-65.bc
+Compiled 100000 lines at Thu Oct  8 23:40:45 2026
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FPDiv(4)_31_8-67.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-66.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(128)_39_8-69.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-68.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-70.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(3200)_39_8-72.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-71.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(512)_38_7-73.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-sqrt(128)_31_8-74.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FPDiv(128)_31_8-75.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-64.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(768)_32-78.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-77.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-76.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-80.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-81.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-79.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-83.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-84.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-85.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-86.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-87.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-82.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-89.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-90.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-88.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-92.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-93.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-94.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-95.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-96.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-91.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-98.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-97.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-100.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-101.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-102.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-103.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-104.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-99.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-106.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-107.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-108.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-109.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-110.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-105.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-112.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-111.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-114.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(384)_39_8-116.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-115.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-113.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-118.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FPDiv(8)_31_8-120.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-119.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(256)_39_8-122.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-121.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-123.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(6400)_39_8-125.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(3584)_39_8-126.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-124.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1024)_38_7-127.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-sqrt(256)_31_8-128.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FPDiv(256)_31_8-129.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-117.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(384)_32-132.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-131.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-130.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-134.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-135.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-133.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-137.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-138.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-139.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-140.bc
+Compiled 200000 lines at Thu Oct  8 23:40:53 2026
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-141.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-136.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-143.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-144.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-142.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-146.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-147.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-148.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-149.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-150.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-145.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-152.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-151.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-154.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-155.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-156.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-157.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-158.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-153.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-160.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-161.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-162.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-163.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-164.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-159.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-166.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-165.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(51)_35_4-169.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4)_35_4-171.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-168.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixAveragePool2d-forward-167.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2048)_39_8-174.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-173.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-175.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-172.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(48)_32-178.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-177.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-176.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-180.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-181.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-179.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-183.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-182.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-185.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-184.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(400)_39_8-188.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-187.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-189.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-186.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(50)_32-192.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(25)_32-193.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(12)_32-194.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(6)_32-195.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(3)_32-196.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(2)_32-197.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(1)_32-198.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(100)_32-199.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(100)_39_8-200.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-exp2_fx(100)_31_8_False-201.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-log2_fx(1)_31_8-203.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1)_39_8-205.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-191.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1)_38_7-206.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-MultiOutput-forward-190.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-AppRcr(2)_31_16_False_False-208.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(200)_71_16-210.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(200)_71_32-212.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2)_62_32-214.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(200)_71_40-216.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-207.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-218.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-219.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(600)_39_8-221.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-220.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-222.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-223.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-224.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-225.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-226.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(192)_39_8-228.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-227.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-229.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-230.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-231.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-232.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-233.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-234.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-235.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-236.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-237.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-238.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-239.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-240.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-241.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-242.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-243.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-244.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-245.bc
+Compiled 300000 lines at Thu Oct  8 23:41:01 2026
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-246.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-247.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-248.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1024)_39_8-250.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-249.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-251.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(96)_39_8-253.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-252.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(32)_35_4-255.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-254.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-256.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-257.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-258.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(5632)_39_8-260.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(8448)_39_8-261.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4608)_39_8-262.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(6912)_39_8-263.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-259.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-264.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-265.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-266.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-267.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-268.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-269.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4864)_39_8-271.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1792)_39_8-272.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-270.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(225)_39_8-274.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(207)_39_8-275.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-273.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-276.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(972)_39_8-278.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(900)_39_8-279.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-277.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-280.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-281.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-282.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-283.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-284.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-285.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-286.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-287.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-288.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-289.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-290.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-291.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-292.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-293.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-294.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-295.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-296.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-297.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-298.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-299.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-300.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-301.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-302.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-303.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-304.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-305.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(25)_39_8-307.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(24)_39_8-308.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-306.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-309.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-310.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1728)_39_8-312.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1664)_39_8-313.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-311.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-314.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-315.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-316.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-317.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-318.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-319.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-320.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-321.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-322.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-323.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-324.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-325.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-326.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-327.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-328.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-329.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-330.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-331.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-332.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-333.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-334.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-335.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-336.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(216)_39_8-338.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-337.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-339.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-340.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2700)_39_8-342.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2600)_39_8-343.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-341.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-344.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-345.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-346.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-347.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-348.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2816)_39_8-350.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4224)_39_8-351.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1152)_39_8-352.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-349.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-353.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-354.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-355.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-356.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-357.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-358.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2432)_39_8-360.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-359.bc
+Compiled 400000 lines at Thu Oct  8 23:41:09 2026
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(108)_39_8-362.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-361.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-363.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-364.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-365.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-366.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-367.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-368.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-369.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-370.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-371.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-372.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-373.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-374.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-375.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-376.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-377.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-378.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-379.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-380.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-381.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-382.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-383.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-384.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-385.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-386.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-387.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-388.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-389.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-390.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(6)_39_8-392.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-391.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-393.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-394.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(3328)_39_8-396.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-395.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-397.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-398.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-399.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-400.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-401.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-402.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-403.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-404.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-405.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-406.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-407.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-408.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-409.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-410.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-411.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-412.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-413.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-414.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-415.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-416.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-417.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-418.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-419.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(54)_39_8-421.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-420.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-422.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-423.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(8748)_39_8-425.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4212)_39_8-426.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-424.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-427.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-428.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-429.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-430.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-431.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1408)_39_8-433.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2112)_39_8-434.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-432.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-435.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-436.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-437.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-438.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-439.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-440.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1216)_39_8-442.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1088)_39_8-443.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-441.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(27)_39_8-445.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-444.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-446.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-447.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-448.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-449.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-450.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-451.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-452.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-453.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-454.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-455.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-456.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-457.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-458.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-459.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-460.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-461.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-462.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-463.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-464.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-465.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-466.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-467.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-468.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-469.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-470.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-471.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-472.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-473.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-474.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-475.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-476.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-477.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-478.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-479.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-480.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-481.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-482.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-483.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-484.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-485.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-486.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-487.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-488.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-489.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-490.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-491.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-492.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-493.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-494.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-495.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-496.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-497.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-498.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-499.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-500.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-501.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-502.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-503.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-504.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(54)_38_7-506.bc
+Compiled 500000 lines at Thu Oct  8 23:41:20 2026
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(54)_48_24-507.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-505.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2)_38_7-510.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2)_48_24-511.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-509.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-512.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1152)_38_7-514.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1152)_48_24-515.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-513.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-516.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-517.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-518.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-519.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-520.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-521.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-522.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-523.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-524.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-525.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-526.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2304)_38_7-528.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(2304)_48_24-529.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-527.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4)_38_7-531.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4)_48_24-532.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-530.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-533.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4608)_38_7-535.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4608)_48_24-536.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-534.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-537.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-538.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(256)_48_24-540.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-539.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-541.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-542.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-543.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-544.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-545.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-546.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-547.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-548.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(9216)_38_7-550.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(9216)_48_24-551.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-549.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(8)_38_7-553.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(8)_48_24-554.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-552.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-555.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(18432)_38_7-557.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(18432)_48_24-558.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-556.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-559.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-560.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1024)_48_24-562.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-561.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-563.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-564.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-565.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-566.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-567.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-568.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-569.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-570.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4096)_38_7-572.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4096)_48_24-573.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-571.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(16)_38_7-575.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(16)_48_24-576.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-574.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(8192)_38_7-578.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(8192)_48_24-579.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-577.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-580.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-581.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-582.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-583.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-584.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-585.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-586.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1600)_38_7-588.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1600)_48_24-589.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-587.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(3)_38_7-591.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(3)_48_24-592.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-590.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-593.bc
+use test set
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-595.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-596.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-594.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-598.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-599.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-600.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-601.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-602.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-597.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-604.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-603.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-606.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-607.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-605.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-609.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-610.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-611.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-612.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-613.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-608.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-615.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-616.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-617.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-618.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-619.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-614.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-621.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-620.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-623.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-624.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-625.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-626.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-627.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-622.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-629.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-630.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-631.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-632.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-633.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-628.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-635.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-634.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-637.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-638.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-636.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-640.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-641.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-642.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-643.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-644.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-639.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-646.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-645.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-648.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-649.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-647.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-651.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-652.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-653.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-654.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-655.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-650.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-657.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-658.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-656.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-660.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-661.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-662.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-663.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-664.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-659.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-666.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-665.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-668.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-669.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-670.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-671.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-672.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-667.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-674.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-675.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-676.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-677.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-678.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-673.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-680.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-679.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-682.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-683.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-681.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-685.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-686.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-687.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-688.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-689.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-684.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-691.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-690.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-693.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-694.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-692.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-696.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-697.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-698.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-699.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-700.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-695.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-702.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-703.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-701.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-705.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-706.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-707.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-708.bc
+Compiled 600000 lines at Thu Oct  8 23:41:28 2026
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-709.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-704.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-711.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-710.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-713.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-714.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-715.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-716.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-717.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-712.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-719.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-720.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-721.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-722.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-723.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-718.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-725.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-724.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-727.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixAveragePool2d-forward-726.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-729.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-730.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-728.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-732.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-731.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-734.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-735.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-733.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-737.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-736.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-739.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-738.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-741.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-742.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-740.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-743.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-745.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-746.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-744.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-748.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-749.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-750.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-751.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-752.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-747.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(192)_32-755.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-754.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-753.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-757.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-758.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-756.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-760.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-761.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-762.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-763.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-764.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-759.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-766.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-767.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-768.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-769.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-770.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-765.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-772.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-771.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-774.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-775.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-776.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-777.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-778.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-773.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-780.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-781.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-782.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-783.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-784.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-779.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-786.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-785.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-788.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-789.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-787.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-791.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-792.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-793.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-794.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(4096)_39_8-796.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-795.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-790.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(96)_32-799.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-798.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-797.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-801.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-802.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-800.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-804.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-805.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-806.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-807.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-808.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-803.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-810.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-811.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-809.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-813.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-814.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-815.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-816.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-817.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-812.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-819.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-818.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-821.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-822.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-823.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-824.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-825.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-820.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-827.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-828.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-829.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-830.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-831.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-826.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-833.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-832.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-835.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(48)_39_8-837.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-836.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-834.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-839.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-840.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-841.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-842.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-843.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-838.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-845.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-844.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-847.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-848.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-846.bc
+Compiled 700000 lines at Thu Oct  8 23:41:38 2026
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-850.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-851.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-852.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-853.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-854.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-849.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-856.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-857.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixConv2d-forward-855.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-859.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-860.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-861.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-862.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-863.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-858.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-865.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-864.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-867.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-868.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-869.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-870.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-871.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-866.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-873.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-874.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-875.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-876.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-877.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-BatchNorm-forward-872.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-879.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-878.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(26)_35_4-882.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-881.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-FixAveragePool2d-forward-880.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(512)_39_8-885.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-884.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-886.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-883.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-LTZ(256)_32-889.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-888.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Relu-forward-887.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-891.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-892.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-890.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-894.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-893.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-896.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Add-forward-895.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-898.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-899.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-Dense-forward-897.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread1-900.bc
+Initializing convolution weights in [-0.256776,0.256776]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(54)_37_6-902.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-901.bc
+Initializing convolution weights in [-0.096825,0.096825]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(152)_39_8-905.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-904.bc
+Initializing convolution weights in [-0.096825,0.096825]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-906.bc
+Initializing convolution weights in [-0.096825,0.096825]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-907.bc
+Initializing convolution weights in [-0.096825,0.096825]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-908.bc
+Initializing convolution weights in [-0.092319,0.092319]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1000)_33_2-910.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(304)_33_2-912.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-909.bc
+Initializing convolution weights in [-0.068465,0.068465]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1000)_38_7-914.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(608)_38_7-915.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-913.bc
+Initializing convolution weights in [-0.176777,0.176777]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-916.bc
+Initializing convolution weights in [-0.068465,0.068465]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-917.bc
+Initializing convolution weights in [-0.068465,0.068465]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-918.bc
+Initializing convolution weights in [-0.065279,0.065279]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1000)_36_5-920.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(216)_36_5-922.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-919.bc
+Initializing convolution weights in [-0.048412,0.048412]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(432)_39_8-924.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-923.bc
+Initializing convolution weights in [-0.125000,0.125000]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(1000)_37_6-926.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(24)_37_6-927.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-925.bc
+Initializing convolution weights in [-0.048412,0.048412]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-928.bc
+Initializing convolution weights in [-0.048412,0.048412]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-929.bc
+Initializing dense weights in [-0.088388,0.088388]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(96)_36_5-931.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-930.bc
+Initializing dense weights in [-0.076547,0.076547]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-932.bc
+Initializing dense weights in [-0.076547,0.076547]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-933.bc
+Initializing dense weights in [-0.076547,0.076547]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-934.bc
+Initializing dense weights in [-0.076547,0.076547]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-935.bc
+Initializing dense weights in [-0.099015,0.099015]
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-TruncPr(600)_38_7-937.bc
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-multithread-936.bc
+WARNING: Order of memory instructions not preserved, errors possible
+Writing to Programs/Schedules/resnet_train-222-8-31-9-5-50-32.sch
+Writing to Programs/Bytecode/resnet_train-222-8-31-9-5-50-32-0.bc
+Hash: c70b57e2310c5d9309e426afb4f314239e79214f2a03c889ce0eacb41708e24a
+Program requires at most:
+   194333092 integer inputs from player 0
+114997545222400 integer triples
+    19215360 matrix multiplications (1x27 * 27x256)
+104194553600 integer dot products
+19713168148725 integer bits
+498595064390 integer opens
+2673512344320 integer simple multiplications
+    76861440 matrix multiplications (1x576 * 576x256)
+    38430720 matrix multiplications (1x576 * 576x64)
+   115292160 matrix multiplications (1x1152 * 1152x64)
+    38430720 matrix multiplications (1x64 * 64x64)
+    76861440 matrix multiplications (1x1152 * 1152x16)
+   230584320 matrix multiplications (1x2304 * 2304x16)
+    76861440 matrix multiplications (1x128 * 128x16)
+          80 matrix multiplications (1x256 * 256x512)
+         320 matrix multiplications (1x512 * 512x512)
+          80 matrix multiplications (1x512 * 512x100)
+       75040 matrix multiplications (4x256 * 256x512)
+      550400 matrix multiplications (4x512 * 512x512)
+       75040 matrix multiplications (4x512 * 512x100)
+       62560 matrix multiplications (4x100 * 100x512)
+       62560 matrix multiplications (16x128 * 128x100)
+      250240 matrix multiplications (16x128 * 128x512)
+       62560 matrix multiplications (4x512 * 512x256)
+       62560 matrix multiplications (8x128 * 128x512)
+   448430080 matrix multiplications (1x2048 * 2048x9)
+   192184320 matrix multiplications (1x2304 * 2304x36)
+    64061440 matrix multiplications (1x2048 * 2048x1)
+    32030720 matrix multiplications (1x256 * 256x64)
+    32030720 matrix multiplications (1x2304 * 2304x100)
+   112107520 matrix multiplications (1x8192 * 8192x9)
+    96092160 matrix multiplications (1x1152 * 1152x100)
+    16015360 matrix multiplications (1x8192 * 8192x1)
+    16015360 matrix multiplications (1x128 * 128x256)
+    16015360 matrix multiplications (1x1152 * 1152x324)
+    32406080 matrix multiplications (1x32768 * 32768x9)
+    64061440 matrix multiplications (1x576 * 576x324)
+  3864462026 virtual machine rounds

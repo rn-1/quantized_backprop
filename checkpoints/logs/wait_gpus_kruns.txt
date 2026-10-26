@@ -1,0 +1,8 @@
+10-21 15:47 queue: 6 16 6 15 5 15
+10-21 15:57 queue: 6 16 6 15 5 15
+10-21 16:07 LAUNCHED K=6 S=2^16 on GPU 1 -> ssweep_S16_k6.txt
+10-21 16:07 LAUNCHED K=6 S=2^15 on GPU 2 -> ssweep_S15_k6.txt
+10-21 16:07 queue: 5 15
+10-21 16:17 LAUNCHED K=5 S=2^15 on GPU 0 -> ssweep_S15_k5_r2.txt
+10-21 16:17 queue: empty
+ALL K RUNS LAUNCHED Wed Oct 21 16:17:53 PDT 2026

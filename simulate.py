@@ -28,7 +28,7 @@ BITs = 22
 # 2**16 -- so B_IV > BITs buys NO accuracy at BITs 8 or 10 and only costs ring. The floor-lowering
 # to BITs=10 comes from loss scaling alone. B_IV is therefore left == BITs (Method A OFF, identical
 # to the original path). Raise it (e.g. BITs+8) only for a deeper / higher-variance net where var
-# actually approaches 2**(2*BITs); keep 1.5*BITs + B_IV < ~56 so g*m stays in the 57-bit ring.
+# actually approaches 2**(2*BITs); keep payloads below 2**(RING_BITS-1) (monitor them; see ring_truncate).
 B_IV = BITs
 
 # Forward activation scaling for the softmax ("forward loss scale"). The softmax probabilities are
@@ -50,10 +50,11 @@ SOFTMAX_EXTRA_BITS = 0
 
 # Ring bit-width l of the simulated fixed-point dtype (values live in Z_{2**RING_BITS}). This is the
 # TOTAL width -- integer + fractional + sign -- of the backing integer type a real deployment would use.
-# It matters in exactly one place, ring_truncate: the stochastic truncation masks span the full ring, so
-# its correctness-failure rate is ~ |x|/2**RING_BITS (a wrong carry when the mask lands below |x|). All
-# other ops are exact int64 and, as long as the payload peak P < 2**(RING_BITS-1), wrap-free -- so lowering
-# RING_BITS faithfully models a narrower dtype provided P stays under that bound (monitor it). The minimum
+# It matters in exactly one place, ring_truncate: inputs are reduced mod 2**RING_BITS (as shares would be)
+# and truncated with the 1-bit-slack protocol, which is exact (up to +-1 ulp rounding) iff the payload
+# |x| < 2**(RING_BITS-1). A larger payload wraps -- silently wrong, exactly as in MPC. All other ops are
+# exact int64, so lowering RING_BITS faithfully models a narrower ring; monitor the payload peak against
+# 2**(RING_BITS-1) (_quant_converged.py does). Final runs: RING_BITS=35, worst observed payload 2**32.14. The minimum
 # viable RING_BITS = smallest fixed-point representation this training tolerates; sweep it down to find it.
 RING_BITS = 57
 
@@ -107,16 +108,16 @@ def fast_rsqrt(x):
     x2, = to_fixed(*p_truncate(x2))
     magic_number = 1597463007 * 2**7 # 38 bits, fits
     # we need a float number for this to work. hmmm.
-    
+
     # undefined for truncation
     x2, = to_float_no_shift(x2)
     bithacking = x2.view(torch.int64).clone()
     bithacking = magic_number - bithacking
     y = bithacking.view(torch.float64).clone()
     # undef
-    
-    y, = to_fixed_no_shift(y) 
-    
+
+    y, = to_fixed_no_shift(y)
+
     x2, = to_fixed(x)
     y2, = to_fixed(*p_truncate(y**2))
     y2, = to_fixed(*p_truncate(x2*y))
@@ -134,8 +135,6 @@ def pseudosep(x):
     # note that x is fp number
     i_star = torch.floor(torch.log2(x)).to(torch.int64) #
     exp = i_star + 1 - BITs
-    # print("x",x)
-    # print("exp",exp)
 
 
     # exp + 1 goes negative once x < 0.25, and a right shift by a negative amount
@@ -146,14 +145,16 @@ def pseudosep(x):
         torch.bitwise_right_shift(x, torch.clamp(shift, min=0)),
         torch.bitwise_left_shift(x, torch.clamp(-shift, min=0)),
     ) # both branches evaluate, so clamp keeps each shift amount valid
-    # print(frac/2**BITs)
-    # print(frac.dtype)
-    # print(frac)
 
     # we still need sqrt compensation
     # do we need extra bits for compensation?
 
     return frac, exp
+
+ISQRT_NEWTON = 1    # Newton refinement steps in inverse_sqrt (0 = pre-§19 biased path)
+BN_EARLY_DIV_BITS = 0   # BN backward: divide the batch*spatial sums by 2^k early (ring payload, §19.4)
+DIV_PUBLIC_RING = 0     # 1: div_public / CE seed scaling go through ring_truncate (faithful + monitored, §19.4)
+LIN_GRAD_PRESHIFT = 0   # LinearQ backward: pre-truncate grad_output by s bits (split truncation, §19.7)
 
 def inverse_sqrt(x):
     # adapted from lu et al
@@ -164,9 +165,7 @@ def inverse_sqrt(x):
     b, = to_fixed(torch.tensor([5.77789], dtype=torch.float64, device = x.device))
     c, = to_fixed(torch.tensor([3.14736], dtype=torch.float64, device = x.device))
 
-    # print("a,b,c || ",a,b,c)
     u, e = pseudosep(x) # not sure what to do with yet
-    # print("u",u," e",e)
 
     p, = to_fixed(*p_truncate(a*u))
     p, = to_fixed(*p_truncate((p - b) * u))
@@ -181,10 +180,17 @@ def inverse_sqrt(x):
 
     result = ring_truncate(g_mult, BITs)                 # drop BITs -> inv_var int @ 2**B_IV
 
+    # The quadratic initial guess underestimates 1/sqrt by ~0.4% uniformly. That precision-independent
+    # bias capped the fixed-point vs float gradient cosine at ~0.94 at init even at BITs=20 (BITS_REPORT
+    # §19). ISQRT_NEWTON steps y <- y(3 - x*y^2)/2 remove it; each costs 3 mults + 3 truncations on
+    # per-channel vectors (negligible bandwidth). ISQRT_NEWTON=0 reproduces the old path.
+    for _ in range(ISQRT_NEWTON):
+        y2 = ring_truncate(result * result, B_IV)                    # y^2 @ 2**B_IV
+        xy2 = ring_truncate(x * y2, BITs)                            # x*y^2 @ 2**B_IV (~1)
+        result = ring_truncate(result * ((3 << B_IV) - xy2), B_IV + 1)   # y(3 - x y^2)/2 @ 2**B_IV
+
     # comparison
     base, = to_float(x)
-    # print("expected inv sqrt:", 1/torch.sqrt(base))
-    # print("approx inv sqrt:", result)
 
     return result
 
@@ -297,7 +303,21 @@ def div_public(tensor, divisor):
     # the divisor is public, so its reciprocal costs no precision to hold -- the only
     # loss is rounding the quotient back onto the 2**-BITs grid. cast to float64 first:
     # int64 / int in torch yields float32, which drops bits once the operand is large.
-    return torch.round(tensor.to(torch.float64) / divisor).to(torch.int64)
+    # DIV_PUBLIC_RING=1 (§19.4) makes this ring-faithful, as an MPC protocol computes it: the power-of-two
+    # part of the divisor is a ring truncation (stochastic, wraps at RING_BITS, payload-monitored), and
+    # an odd remainder o is a public-constant multiply by round(2^c/o) followed by a c-bit truncation.
+    # DIV_PUBLIC_RING=0 is the original deterministic float division outside the ring model.
+    if not DIV_PUBLIC_RING:
+        return torch.round(tensor.to(torch.float64) / divisor).to(torch.int64)
+    sign = -1 if divisor < 0 else 1
+    d = abs(int(divisor))
+    j = (d & -d).bit_length() - 1                     # 2-adic valuation: d = 2^j * o, o odd
+    o = d >> j
+    if j: tensor = ring_truncate(tensor, j)
+    if o > 1:
+        c = BITs + o.bit_length()                     # reciprocal held to ~BITs significant bits
+        tensor = ring_truncate(tensor * int(round(2**c / o)), c)
+    return sign * tensor
 
 
 # ** accuracy reporting
@@ -338,33 +358,26 @@ def s_truncate(*tensors):
         if tensor.dtype != torch.int64:
             print("WARNING: tensor passed for truncation is not an integer!!")
         int_tensor = tensor # protect against bitwise shift, assume tensor is an int64.
-        
+
         # stochastic ring value
         r = torch.round(torch.rand(tensor.shape, device = tensor.device) * (2**57)).to(torch.int64) # SPEEEEDD
         trunc_r = torch.bitwise_right_shift(r, BITs)
 
-        # print("r val:",r)
-        # print("trunc_r",trunc_r)
-        # print("int_tensor",int_tensor)
-        
+
         int_tensor = torch.where(int_tensor >= 0, int_tensor + r, int_tensor - r)  # this seems shitty
-        # print("int_tensor with r:",int_tensor)
-        
+
         int_tensor = torch.bitwise_right_shift(int_tensor, BITs)
-        # print("int_tensor with trunc:",int_tensor)
 
         int_tensor = torch.where(int_tensor >= 0, int_tensor - trunc_r, int_tensor + trunc_r)  # this seems shitty
-        # print("int_tensor with trunc and correction:",int_tensor)
 
         tensor = int_tensor.to(torch.float64) / 2**BITs
-        # print("final tensor:",tensor)
 
         output.append(tensor) # this is very stupid... why is this stupid?
-    
+
     return tuple(output)
 
 def ring_truncate(tensor, m):
-    # protocol core: stochastic truncation of the low m bits of a 57-bit ring element. returns
+    # protocol core: stochastic truncation of the low m bits of a RING_BITS-bit ring element. returns
     # an int64 whose scale is reduced by 2**m (i.e. round(tensor / 2**m) as a ring element). m is
     # PUBLIC, so any value is a free bit-shift on a real instance. p_truncate wraps this with the
     # /2**m rescale that turns a product of two 2**m-scaled operands back into a real value; call
@@ -380,7 +393,7 @@ def ring_truncate(tensor, m):
     OP_COUNTS['p_truncate_calls'] += 1
     OP_COUNTS['p_truncate_elems'] += tensor.numel()
 
-    # the simulated dtype is a 57-bit ring, but to_fixed hands us a signed int64, which is
+    # the simulated dtype is a RING_BITS-bit ring, but to_fixed hands us a signed int64, which is
     # not a ring element: a negative value carries bits 57..63 set. carry below then reads
     # 1 where it should read 0, and the tiebreaker injects 2**(l-m), so the result returns
     # ~2**43 garbage whenever R happens to land below |tensor| -- rate |tensor|/2**l, which is
@@ -409,7 +422,6 @@ def ring_truncate(tensor, m):
     b = a - r1
     c = b + ((v)<< (l-m))
 
-    #compare ==> removed for training.
 
     # c is a Z_{2**(l-m)} element. the protocol itself never needs this step -- ring
     # arithmetic carries the sign implicitly and you decode only at reveal -- but the sim
@@ -440,15 +452,10 @@ class Conv2dQ(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, kernel, bias, stride, padding, dilation): # in this case these are defaults so wtv.
         # TODO
-        # print("=== Conv2dQ forward called ===")
-        # print("conv2d info (float format):")
-        # print("inputs:",input)
-        # print("weights:",kernel)
-        # print("bias:",bias)
-        
+
         # float kernel and input
         input, kernel, bias = to_fixed(input, kernel, bias) # make it an integer
-        
+
         ctx.save_for_backward(
             input, kernel
         ) # i hope this isn't by reference.
@@ -459,11 +466,11 @@ class Conv2dQ(torch.autograd.Function):
 
         if isinstance(padding, int):
             padding = (padding, padding)
-            
+
         # Same for stride and dilation
         if isinstance(stride, int):
             stride = (stride, stride)
-            
+
         if isinstance(dilation, int):
             dilation = (dilation, dilation)
 
@@ -471,15 +478,10 @@ class Conv2dQ(torch.autograd.Function):
         # run conv2d and return the result
 
         # Debug info
-        # print("Input shape:", input.shape)
-        # print("Kernel shape:", kernel.shape)
-        # print("Stride:", stride)
-        # print("Padding:", padding)
-        # print("Dilation:", dilation)
 
         # This will fail if input, kernel are not floats.
         input, kernel = to_float_no_shift(input, kernel) # numbers are just ints in floats lol.
-        try:   
+        try:
             output = F.conv2d(input, kernel, bias = None, stride=stride, padding=padding, dilation=dilation)
         except Exception as e:
             print(f"Conv2d error: {e}")
@@ -495,7 +497,7 @@ class Conv2dQ(torch.autograd.Function):
         output, = to_float(output)
 
         return output
-    
+
     @staticmethod
     def backward(ctx, grad_output):
 
@@ -504,7 +506,6 @@ class Conv2dQ(torch.autograd.Function):
 
         #quant
         groups = 1
-        #grad_output = torch.round(grad_output.to(dtype) * 2**BITs).to(dtype) # needed?
 
         input, kernel = ctx.saved_tensors # already fp
         grad_output, = to_fixed(grad_output) # bc grad_output will be a float.
@@ -518,14 +519,14 @@ class Conv2dQ(torch.autograd.Function):
 
         if isinstance(padding, int):
             padding = (padding, padding)
-            
+
         if isinstance(stride, int):
             stride = (stride, stride)
-            
+
         if isinstance(dilation, int):
             dilation = (dilation, dilation)
 
-        # to compute : 
+        # to compute :
         #   grad w.r.t. input
         #   grad w.r.t. kernel
 
@@ -551,15 +552,12 @@ class Conv2dQ(torch.autograd.Function):
             groups=groups,
             dilation=dilation,
         )
-        
+
 
         # compute gradient with respect to kernel:
 
-        # print("grad output shape in conv:",grad_output.shape)
-        # print("repeats:",inchannels//groups)
-        
+
         grad_bias = grad_output.sum((0,2,3)) # grad bias?
-        # print(grad_bias.shape)
         grad_output = grad_output.repeat(1, in_channels // groups, 1, 1)
         # this repeat is eating up memory maybe i need to clear memory more effectively as well.
         grad_output = grad_output.view(
@@ -600,12 +598,10 @@ class Conv2dQ(torch.autograd.Function):
         grad_kernel = grad_kernel.narrow(2, 0, kernel_size_y)
         grad_kernel = grad_kernel.narrow(3, 0, kernel_size_x)
 
-        # grad_input = quantize(grad_input)
-        # grad_kernel = quantize(grad_kernel) not needed since calculated with quantized values.
         # this should be correct.
-        grad_input, grad_kernel = to_fixed_no_shift(grad_input, grad_kernel) # this hopefully won't overflow?
-        grad_input, grad_kernel = p_truncate(grad_input, grad_kernel) # this should work.
-        grad_bias, = to_float(grad_bias) # cool
+        grad_input, grad_kernel = to_fixed_no_shift(grad_input, grad_kernel) # payload monitored: near-miss tail site in the final runs (BITS_REPORT §21.6)
+        grad_input, grad_kernel = p_truncate(grad_input, grad_kernel)
+        grad_bias, = to_float(grad_bias)
 
         return (grad_input, grad_kernel, grad_bias, None, None, None) # stride, padding, dilation are not needed in the backward pass.
 
@@ -617,24 +613,16 @@ class LinearQ(torch.autograd.Function):
     @staticmethod
     def forward(ctx, inputs, weights, bias):
 
-        # print("=== LinearQ forward called ===")
-
-        # print((inputs @ weights.T) + bias)
 
         inputs, weights, bias = to_fixed(inputs,weights,bias) # make fp
         inputs, weights = to_float_no_shift(inputs,weights)
 
-        # print("linear info (fixed-float format):")
-        # print("inputs:",inputs)
-        # print("weights:",weights)
-        # print("bias:",bias)
 
         ctx.save_for_backward(inputs, weights, bias)
 
         result = inputs @ weights.T
         result, = to_fixed_no_shift(result) # dude this seems really fucking stupid.
         result, = p_truncate(result) # TESTTEST
-        # print("truncated result:",result)
         result, = to_fixed(result)
         result = result + bias
 
@@ -643,50 +631,50 @@ class LinearQ(torch.autograd.Function):
 
         result, weights, bias = to_float(result, weights, bias) # go back
 
-        # print(result)
 
         return result
 
     @staticmethod
-    def backward(ctx, grad_output): # double check what values need to be quantized here?
-        
+    def backward(ctx, grad_output): # verified against float64 (_gateB.py, BITS_REPORT §19)
+
         # quantize grad_output?
-        # print("=== LinearQ backward called ===")
 
         inputs, weights, bias = ctx.saved_tensors # already expanded values
 
         grad_output, = to_fixed(grad_output) # expand grad_output
-        
-        grad_bias, = to_float(grad_output) 
+
+        grad_bias, = to_float(grad_output)
+        # LIN_GRAD_PRESHIFT = s (§19.7): split the truncation. Drop s bits of grad_output BEFORE the two
+        # matmuls and BITs-s after, so the products peak at 2^(2*BITs-s) instead of 2^(2*BITs). This was
+        # the only site still overflowing a 32-bit ring (2^31.2-31.8, early epochs). The cost is s bits
+        # of resolution on the S-lifted gradient in the Linear layers only. s=0 is the original path.
+        s = LIN_GRAD_PRESHIFT
+        if s: grad_output = ring_truncate(grad_output, s)              # @ 2^(BITs-s)
         grad_output, = to_float_no_shift(grad_output)
 
         grad_weight = inputs.T @ grad_output
 
-        grad_input = grad_output @ weights # double check this is right?
+        grad_input = grad_output @ weights
         # these will be floats
 
         grad_input, grad_weight = to_fixed_no_shift(grad_input, grad_weight)
-        grad_input, grad_weight = p_truncate(grad_input, grad_weight)
+        if s:
+            grad_input = ring_truncate(grad_input, BITs - s).to(torch.float64) / 2**BITs
+            grad_weight = ring_truncate(grad_weight, BITs - s).to(torch.float64) / 2**BITs
+        else:
+            grad_input, grad_weight = p_truncate(grad_input, grad_weight)
 
-        # print(grad_input.shape)
-        # print(grad_weight.shape)
 
         return (grad_input, grad_weight.T, grad_bias)
 
 
+BN_STATS_F = 0   # §21.6: fractional bits for BN running-stat accumulation (0 = the 2**-BITs compute grid)
+
 class BatchNorm2dQ(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, x, running_mean, running_var, weight, bias):
+    def forward(ctx, x, running_mean, running_var, weight, bias, training=True):
 
-        # print(x.shape)
-        # print("=== BatchNorm2dQ forward called ===")
-        # print("conv2d info (float format):")
-        # print("inputs:",x)
-        # print("running_mean:",running_mean)
-        # print("running_var:",running_var)
-        # print("weight:",weight)
-        # print("bias:",bias)
 
         stats_dimensions = list(range(x.dim()))
         stats_dimensions.pop(1)
@@ -694,7 +682,6 @@ class BatchNorm2dQ(torch.autograd.Function):
         broadcast_shape = [1] * x.dim()
         broadcast_shape[1] = x.shape[1]
 
-        # print("x",x)
         gt_x = x
         gt_mean = gt_x.mean(stats_dimensions)
         gt_var = gt_x.var(stats_dimensions, unbiased=False) # torch normalises with the biased variance
@@ -703,17 +690,16 @@ class BatchNorm2dQ(torch.autograd.Function):
         x, weight, bias = to_fixed(x, weight, bias)
 
         # eps = 1 # in our fixed point system, this refers to 2^-6 ~= 0.015625.
-        momentum = 0.1 # ok
+        momentum = 0.1   # torch's BN momentum
 
-        # print(x.shape)
 
         # determine dimensions over which means and variances are computed:
 
         # shape for broadcasting statistics with input:
-        # print(x.dim())
 
-        # compute mean and variance, track batch statistics:
-        training = True
+        # compute mean and variance, track batch statistics. training comes from the module's mode (§21.6):
+        # it used to be hard-coded True, so eval normalised each TEST batch by its own statistics (and
+        # overwrote the running stats with test-set statistics) instead of using the running stats.
         if training:
             # mean requires float?
             x, = to_float_no_shift(x)
@@ -734,7 +720,23 @@ class BatchNorm2dQ(torch.autograd.Function):
 
             x, = to_fixed_no_shift(x) # to fp for later.
 
-            if running_mean is not None and running_var is not None: 
+            if running_mean is not None and running_var is not None and BN_STATS_F:
+                # §21.6: accumulate the running stats at 2**-BN_STATS_F (storage precision, like the master
+                # weights) instead of the 2**-BITs compute grid, where small-variance channels drown in
+                # rounding noise. The batch sum (2**BITs) and sum of squares (2**(2*BITs)) are exact ring
+                # values, so the batch stats come at higher precision for free (division by public n).
+                # Update as r + mom*(b - r): one truncation, payload |b - r|*2**BITs*mom ~ 2**23 here.
+                Fs = BN_STATS_F; mom = int(round(momentum * 2**BITs))
+                xf = x.to(torch.float64)
+                mean_s = torch.round(xf.mean(stats_dimensions) * 2**(Fs - BITs)).to(torch.int64)
+                var_s = torch.round(xf.var(stats_dimensions, unbiased=True) * 2.0**(Fs - 2 * BITs)).to(torch.int64)
+                rm_s = torch.round(running_mean * 2**Fs).to(torch.int64)
+                rv_s = torch.round(running_var * 2**Fs).to(torch.int64)
+                rm_s = rm_s + ring_truncate((mean_s - rm_s) * mom, BITs)
+                rv_s = rv_s + ring_truncate((var_s - rv_s) * mom, BITs)
+                running_mean.set_(rm_s.to(torch.float64) / 2**Fs)
+                running_var.set_(rv_s.to(torch.float64) / 2**Fs)
+            elif running_mean is not None and running_var is not None:
                 momentum = int(round(momentum * 2**BITs))
                 alpha = (1 << BITs) - momentum
 
@@ -745,47 +747,27 @@ class BatchNorm2dQ(torch.autograd.Function):
                 t1m = rm_fixed * alpha
                 t2m = mean * momentum
 
-                rvar = p_truncate(t1v)[0] + p_truncate(t2v)[0] # not ok.
+                rvar = p_truncate(t1v)[0] + p_truncate(t2v)[0] # stock 2**-BITs EMA: small-variance channels drown in rounding noise (§21.6) -> use BN_STATS_F=16
                 rmean = p_truncate(t1m)[0] + p_truncate(t2m)[0] # these need truncation
 
-                # running_var, running_mean = p_truncate(running_var, running_mean)
                 running_var.set_(rvar)
                 running_mean.set_(rmean)
-                # print("Updated running mean:",running_mean)
-                # print("Updated running var:",running_var)
 
         else:
             if running_mean is None or running_var is None:
                 raise ValueError(
                     "Must provide running_mean and running_var when training is False"
                 )
-            # mean = quantize(running_mean)
-            # variance = quantize(running_var)
-            mean = running_mean
-            variance = running_var
+            # running stats are held as reals on the 2**-BITs grid; encode, and clamp like the batch path
+            mean, variance = to_fixed(running_mean, running_var)
+            variance = torch.clamp(variance, min=1)
 
-        if training or inv_var is None:
-            # variance, = to_fixed(*p_truncate(variance))
-            # print(variance)
+        if True:   # both train and eval need inv_var
             inv_var = inverse_sqrt(variance)  # already int @ 2**B_IV (see inverse_sqrt / B_IV)
-            # print("inv_var:",*to_float(inv_var))
             gt_x, = to_float(x)
             gt_var = gt_x.var(stats_dimensions, unbiased=True)
             gt_inv_var = 1 / torch.sqrt(gt_var.to(torch.float64) + 1e-6)
-            # print("expected inv_var:",gt_inv_var)
-            # inv_var, = to_fixed(*p_truncate(inv_var)) # small number correction
-            # compute inverse variance:
-        #     if torch.is_tensor(variance):
-        #         inv_var = (1<<BITs) / torch.sqrt(variance + eps) # difficult for mpc -- we will need to run this approximation soon.
-        #     else:
-        #         inv_var = 1<<BITS * (variance + eps).rsqrt() # should work
 
-        # # reshape shape (C) to broadcastable (1, C, 1, +):
-        # # print(weight.shape)
-        # # print(bias.shape)
-        # inv_var, = to_fixed_no_shift(inv_var)
-        # inv_var, = p_truncate(inv_var) # truncate from multiplication
-        # inv_var, = to_fixed(inv_var) # back to int.
 
         mean = mean.reshape(broadcast_shape)
         inv_var = inv_var.reshape(broadcast_shape)
@@ -793,32 +775,18 @@ class BatchNorm2dQ(torch.autograd.Function):
         weight = weight.reshape(broadcast_shape)
         bias = bias.reshape(broadcast_shape)
 
-        # print(x.shape)
-        # print(mean.shape, inv_var.shape)
-        # print("batchnorm values",mean, inv_var)
 
         # compute z-scores:
-        # print( x- mean )
         x_norm = (x - mean) * inv_var            # (x-mean)@2**BITs * inv_var@2**B_IV -> 2**(BITs+B_IV)
-        # print(mean)
-        # print(inv_var)
         x_norm = ring_truncate(x_norm, B_IV)     # drop B_IV -> x_norm int @ 2**BITs
-        # print("x_norm",x_norm)
-        # print("expected x_norm:", gt_x_norm)
-        # report_error("x_norm", x_norm, gt_x_norm)
-
-        # print("gt_x",gt_x)
 
 
-        # print(x_norm)
         # x_norm is already an int @ 2**BITs from ring_truncate above (no to_fixed needed)
 
         # save context and return:
         ctx.save_for_backward(gt_x_norm, x_norm, weight, inv_var)
         ctx.training = training
 
-        # print(weight.shape, bias.shape, x_norm.shape)
-        # hack fix bc i messed something up.
 
         result = (x_norm * weight.reshape(broadcast_shape))
         result, = p_truncate(result)
@@ -826,22 +794,18 @@ class BatchNorm2dQ(torch.autograd.Function):
         result = result + bias
         result, = to_float(result)
 
-        weight, bias, running_mean, running_var = to_float(weight, bias, running_mean, running_var) # needed?
+        weight, bias, running_mean, running_var = to_float(weight, bias, running_mean, running_var) # locals only; no effect on the returned value
 
-
-        # print(result)
 
         return result
-    
+
     @staticmethod
     def backward(ctx, grad_output):
         # retrieve context:
-        # print(grad_output)
 
-        # print("=== BatchNorm2dQ backward called ===")
 
         # TODO read through this.
-        
+
         # these will also be quantized in the forward pass.
         gt_x_norm, x_norm, weight, inv_var = ctx.saved_tensors
 
@@ -862,30 +826,37 @@ class BatchNorm2dQ(torch.autograd.Function):
         broadcast_shape[1] = grad_output.shape[1]
 
         # compute gradient w.r.t. weight:
-        grad_weight = grad_output.mul(x_norm) 
+        grad_weight = grad_output.mul(x_norm)
         grad_weight, = p_truncate(grad_weight)
         grad_weight = grad_weight.sum(stats_dimensions)
 
-        # print("calculated grad weight:",grad_weight)
-        # print("expected grad weight:",thing)
 
         # compute gradient w.r.t. bias:
-        grad_bias = grad_output.sum(stats_dimensions) # yeah 
+        grad_bias = grad_output.sum(stats_dimensions) # yeah
         grad_bias, = to_float(grad_bias)
 
         # compute gradient with respect to the input:
-        
+
         grad_output = grad_output.mul(weight) # is this a correct result
         grad_output, = p_truncate(grad_output)
         grad_output, = to_fixed(grad_output)
-        
+
         grad_input = grad_output.mul(inv_var)                    # grad_out@2**BITs * inv_var@2**B_IV -> 2**(BITs+B_IV)
         grad_input, = to_float(ring_truncate(grad_input, B_IV))  # drop B_IV -> int @ 2**BITs -> real
 
         if training:
             # compute gradient term that is due to the mean:
             num_element = np.prod([grad_output.size(d) for d in stats_dimensions])
+            # BN_EARLY_DIV_BITS = k: apply a public 2^k of the /N to the batch*spatial sums right after
+            # summing (one truncation on a per-channel vector -- negligible cost) and the remaining N/2^k
+            # at the end. The undivided sums times inv_var were the ring-payload peak at BITs=8 (2^31.6,
+            # BITS_REPORT §19.4); k trades a little precision on the sums for k bits of ring. N = 128*H*W, so
+            # 2^k divides it for k <= 7. k=0 is the original fully-deferred division.
+            k = BN_EARLY_DIV_BITS
+            assert num_element % (1 << k) == 0
+            n_rest = num_element >> k
             grad_mean = grad_output.sum(stats_dimensions)
+            if k: grad_mean = ring_truncate(grad_mean, k)
             grad_mean = grad_mean.reshape(broadcast_shape)
 
             # inv_var/num_element rounds to 0 once num_element > 2**BITs, which
@@ -893,13 +864,14 @@ class BatchNorm2dQ(torch.autograd.Function):
             # and defer the division to the end, where there is magnitude to spare.
             grad_mean = grad_mean.mul(inv_var) # inv_var@2**B_IV -> scale 2**(BITs+B_IV)
             grad_mean = ring_truncate(grad_mean, B_IV) # drop B_IV -> int @ 2**BITs
-            grad_mean = div_public(grad_mean, -num_element)
+            grad_mean = div_public(grad_mean, -n_rest)
             grad_mean, = to_float(grad_mean)
 
             # compute gradient term that is due to the standard deviation:
             grad_std = x_norm.mul(grad_output) # this should be fp
             grad_std, = to_fixed(*p_truncate(grad_std))
             grad_std = grad_std.sum(stats_dimensions)
+            if k: grad_std = ring_truncate(grad_std, k)
 
             grad_std = grad_std.reshape(broadcast_shape)
             grad_std = x_norm.mul(grad_std)
@@ -909,18 +881,17 @@ class BatchNorm2dQ(torch.autograd.Function):
 
             grad_std = grad_std.mul(inv_var) # inv_var@2**B_IV -> scale 2**(BITs+B_IV)
             grad_std = ring_truncate(grad_std, B_IV) # drop B_IV -> int @ 2**BITs
-            grad_std = div_public(grad_std, -num_element)
+            grad_std = div_public(grad_std, -n_rest)
             grad_std, = to_float(grad_std) # final float form
 
             # put all the terms together:
             grad_input = grad_input.add(grad_mean).add(grad_std)
-        
-        # print(stats_dimensions)
+
 
         # return gradients:
 
         # running_mean and running_var don't require gradients -> return None for those slots
-        return (grad_input, None, None, grad_weight, grad_bias)
+        return (grad_input, None, None, grad_weight, grad_bias, None)
 
 
 # =============================================================================================
@@ -991,6 +962,8 @@ def fixed_exp(x, extra_bits=0):
     return result
 
 
+RECIP_NEWTON = 1    # Newton refinement steps in fixed_reciprocal (0 = pre-§19 biased softmax normaliser)
+
 def fixed_reciprocal(d):
     # Fixed-point reciprocal via 1/d = (1/sqrt(d))^2: reuse the tested inverse_sqrt, then square. d is
     # the softmax row-sum (>= 1). Squaring roughly doubles inverse_sqrt's relative error, so this is a
@@ -998,9 +971,17 @@ def fixed_reciprocal(d):
     # re-checking the BITs floor. Op-count-wise it charges one inv_sqrt + one multiply, not a native
     # reciprocal's round profile (fine: softmax runs once/sample, negligible bandwidth, BITS_REPORT
     # sec 7.2). d int64 @ 2^BITs -> 1/d int64 @ 2^BITs.
-    # TODO (optional): swap for a native Newton reciprocal if an accurate round count is needed.
+    # The squared inverse_sqrt is biased ~-0.7% (inverse_sqrt underestimates ~-0.4% uniformly), so the
+    # softmax rows summed to ~0.993, leaving a non-vanishing seed gradient sum(p)-1 ~ -0.006 per sample
+    # that keeps pushing the target logit up even when it is classified correctly (BITS_REPORT §19). RECIP_NEWTON
+    # Newton steps y <- y(2 - d*y) remove it (error squares per step; 2 mults + 2 truncations each,
+    # the standard CrypTen/CryptGPU reciprocal refinement). RECIP_NEWTON=0 reproduces the old biased path.
     r = inverse_sqrt(d)                              # 1/sqrt(d) @ 2^B_IV
-    return ring_truncate(r * r, 2 * B_IV - BITs)     # (1/sqrt(d))^2 = 1/d @ 2^BITs
+    y = ring_truncate(r * r, 2 * B_IV - BITs)        # (1/sqrt(d))^2 = 1/d @ 2^BITs
+    for _ in range(RECIP_NEWTON):
+        e = ring_truncate(d * y, BITs)               # d*y @ 2^BITs (~1)
+        y = ring_truncate(y * ((2 << BITs) - e), BITs)   # y*(2 - d*y) @ 2^BITs
+    return y
 
 
 class CrossEntropyLossQ(torch.autograd.Function):
@@ -1068,8 +1049,21 @@ class CrossEntropyLossQ(torch.autograd.Function):
         # bug. Choosing A = log2(S) - log2(N) lines the two floors up so they descend together as S grows.
         # With A=0 and S=1 this reproduces both underflow floors exactly (sec 8), which is why forward
         # scaling (A>0) AND loss scaling (S>1) are both needed to push BITs below 10.
-        grad = grad * grad_output.to(torch.int64)      # * S first (public shift), exact, @ 2^(BITs+A)
-        grad = div_public(grad, N << A)                # round((p-y)*S / N) back to 2^BITs; strips the A
+        if DIV_PUBLIC_RING:
+            # Ring-faithful order (§19.4): S, 2^A and the power-of-two part of N are all public shifts, so
+            # apply their NET shift once. Multiplying by S first and dividing after put a 2^(BITs+A+log2 S)
+            # intermediate on the ring (2^33 at BITs=8, S=2^16) for nothing; at S=2^16, A=9, N=128 the net
+            # shift is 0 and the step is exact. The odd part of N (last, partial batch) is a public division.
+            S_int = int(grad_output.item())
+            assert S_int > 0 and S_int & (S_int - 1) == 0, "ring path needs a power-of-two loss scale"
+            vN = (N & -N).bit_length() - 1
+            shift = A + vN - (S_int.bit_length() - 1)
+            if shift > 0:   grad = ring_truncate(grad, shift)
+            elif shift < 0: grad = grad << (-shift)
+            if (N >> vN) > 1: grad = div_public(grad, N >> vN)
+        else:
+            grad = grad * grad_output.to(torch.int64)  # * S first (public shift), exact, @ 2^(BITs+A)
+            grad = div_public(grad, N << A)            # round((p-y)*S / N) back to 2^BITs; strips the A
         #                                                elevation (N*2^A) AND the /N in one rounding, done
         #                                                at the lifted scale so small components survive.
         grad, = to_float(grad)                         # decode @ 2^BITs; fc3 (LinearQ.backward) requantizes
@@ -1139,7 +1133,7 @@ class QBatchNorm2d(nn.Module):
         self.register_buffer('running_var', torch.ones(c, dtype=torch.float64))
 
     def forward(self, x):
-        return BatchNorm2dQ.apply(x, self.running_mean, self.running_var, self.weight, self.bias)
+        return BatchNorm2dQ.apply(x, self.running_mean, self.running_var, self.weight, self.bias, self.training)
 
 
 class QLinear(nn.Module):
@@ -1272,10 +1266,85 @@ class CNNModelBaseline(_ResNet):
         super().__init__(q=False)
 
 
+# ---- fixed-point SGD (BITS_REPORT §11.2 / §20) ----------------------------------------------------------
+def mul_public_const(x, k, frac_in, frac_out, p=8):
+    # Multiply ring tensor x (int @ 2^frac_in) by a PUBLIC real constant k > 0 and return int @ 2^frac_out.
+    # k is encoded as a p-bit integer mantissa times a power of two, k ~= m * 2^-e (public "block floating
+    # point" for constants). x*m is a local public-scalar multiply, and the rescale is one ring truncation
+    # by e + frac_in - frac_out (stochastic, wraps at RING_BITS, payload-monitored). The payload is
+    # |x| * 2^(frac_in + p): p, not the size of k, sets the ring cost, so tiny constants (wd, late lr)
+    # keep full relative precision.
+    if k == 0:
+        return torch.zeros_like(x)
+    e = p - 1 - math.floor(math.log2(k))
+    m = int(round(k * 2**e))
+    shift = e + frac_in - frac_out
+    y = x * m
+    if shift > 0:   return ring_truncate(y, shift)
+    if shift < 0:   return y << (-shift)
+    return y
+
+
+def shift_scale(x, frac_in, frac_out):
+    # re-express int @ 2^frac_in at 2^frac_out: a public truncation (down) or an exact left shift (up)
+    if frac_in > frac_out: return ring_truncate(x, frac_in - frac_out)
+    if frac_in < frac_out: return x << (frac_out - frac_in)
+    return x
+
+
+class FixedSGD:
+    # SGD with momentum + L2 weight decay (torch.optim.SGD semantics: v <- mu*v + (g + wd*w); w <- w - lr*v)
+    # with ALL optimizer state held as ring elements, as a secret-shared run would hold it:
+    #   W  master weights   int @ 2^F_W        V  momentum buffer   int @ 2^F_V
+    # Every rescale is a ring_truncate, i.e. stochastic, wrapping at RING_BITS, and seen by payload monitors.
+    # Per step and per parameter element: wd*W, mu*V, lr*V (3 const-mults) + 2-3 rescales + the compute copy.
+    #
+    # Gradient intake: backward leaves p.grad = S*g on the 2^-BITs grid (the loss scale is never removed in
+    # the ring). round(p.grad * 2^BITs) is therefore EXACTLY g at 2^(BITs + log2 S), so the unscale is free:
+    # it is a reinterpretation of the scale, followed by one shift to 2^F_V.
+    #
+    # Compute copy: the forward/backward see W truncated to the 2^-BITs grid. This is a fresh stochastic
+    # truncation each step, as MPC would do (replacing the old deterministic to_fixed of a float master).
+    # F_W = BITs means no master copy: weights live on the compute grid and sub-grid updates survive only
+    # in expectation, via stochastic rounding (Gupta et al. 2015).
+    def __init__(self, params, lr, momentum, weight_decay, S, F_W=20, F_V=20, p=8):
+        self.params = [q for q in params]
+        self.lr, self.mu, self.wd = lr, momentum, weight_decay
+        self.logS = int(round(math.log2(S))); assert 2**self.logS == S
+        self.F_W, self.F_V, self.p = F_W, F_V, p
+        with torch.no_grad():
+            self.W = [torch.round(q.detach() * 2**F_W).to(torch.int64) for q in self.params]
+            self.V = [torch.zeros_like(w) for w in self.W]
+            self._publish()
+
+    def _publish(self):
+        # write the compute copy (W truncated to 2^-BITs) into the module params used by fwd/bwd
+        for q, w in zip(self.params, self.W):
+            wc = shift_scale(w, self.F_W, BITs) if self.F_W != BITs else w
+            q.data.copy_(wc.to(torch.float64) / 2**BITs)
+
+    def zero_grad(self):
+        for q in self.params: q.grad = None
+
+    @torch.no_grad()
+    def step(self):
+        fg = BITs + self.logS                                 # gradient's native fixed-point scale
+        for q, w, v in zip(self.params, self.W, self.V):
+            if q.grad is None: continue
+            g = torch.round(q.grad * 2**BITs).to(torch.int64)  # exact: S*g already on the 2^-BITs grid
+            g = shift_scale(g, fg, self.F_V)                   # g @ 2^F_V
+            if self.wd: g = g + mul_public_const(w, self.wd, self.F_W, self.F_V, self.p)
+            # mu*v as v - (1-mu)*v: the p-bit mantissa then encodes 0.1, not 0.9, cutting the momentum-
+            # constant error ~10x (an 8-bit 0.9 -> 0.8984 biased total displacement by 1.3 %, §20)
+            v.copy_(v - mul_public_const(v, 1 - self.mu, self.F_V, self.F_V, self.p) + g)
+            w.sub_(mul_public_const(v, self.lr, self.F_V, self.F_W, self.p))
+        self._publish()
+
+
 class one_hot:
     def __init__(self, num_classes):
         self.classes = num_classes
-    
+
     def __call__(self, label):
         lvec = torch.zeros(self.classes)
         lvec[label] = 1
@@ -1363,9 +1432,6 @@ def train_model(model, num_epochs, lr, max_batches = None):
         print("Running on GPU")
         print("GPU Type:",torch.cuda.get_device_name(0))
 
-    # start = torch.cuda.Event(enable_timing=True)
-    # end = torch.cuda.Event(enable_timing=True)
-
 
     for epoch in range(num_epochs):
         # keep output to ttyl to a minimum since this tends to be time consuming
@@ -1375,14 +1441,12 @@ def train_model(model, num_epochs, lr, max_batches = None):
         for batch_idx, (inputs, labels) in batch_it :
             if max_batches is not None and batch_idx >= max_batches:
                 break
-            # start.record()
             inputs = inputs.to(device).to(model_dtype)
             # labels arrive one-hot (N, 100); CrossEntropyLoss wants class indices (N,).
             targets = labels.to(device).argmax(1)
 
             optimizer.zero_grad()
             outputs = model(inputs)
-            # print(outputs.shape)
             loss = ce(outputs, targets)
 
             loss.backward()
@@ -1391,10 +1455,8 @@ def train_model(model, num_epochs, lr, max_batches = None):
             losses.append(loss.item())
             batch_it.set_postfix({'loss': loss.item()})
 
-            # end.record()
 
             torch.cuda.synchronize()
-            # batch_times.append( start.elapsed_time(end) )
 
         # no point validating since we don't realistically care.
 

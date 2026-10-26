@@ -2,6 +2,12 @@
 
 *Findings only. For recommendations, the code-change log, and open TODOs see `RECOMMENDATIONS.md`.*
 
+> **Current status (2026-10-26). Read `RESULTS.md` first.** This report is a chronological lab notebook.
+> Early sections (bottom line, §1–§18, and §19.6's accuracies) are superseded.
+> **Final result:** f=8 compute, ℓ=35, S=2^16. 70.95 ± 0.03 vs float 71.79 ± 0.16 (gap −0.84 ± 0.13, 3 seeds,
+> zero wraps; §21.8). MP-SPDZ reproduces the loss-scaling effect (§21.5). Measured communication 1.61× lower
+> than ℓ=64 (§21.2). Superseded figures are marked in place.
+
 **Task:** CIFAR-100 CNN, secure-MPC fixed-point *simulation*. Values live on a 57-bit ring
 (`l=57`), `BITs` = fractional bits, remaining `57 − BITs` bits are integer magnitude.
 int64 is the container (7 bits headroom above the ring).
@@ -1127,6 +1133,719 @@ below the log's 3-decimal resolution.
   measured. Next: the float gradient control, plus a per-layer check of fixed-point vs float gradients
   at identical weights (BITs 8/10/13) to rule out a systematic gradient error.
 
+## 19. Gates A and B — two approximation bugs, the 32-bit payload, and the real cost of a smaller ring
+
+> **Caveat on §16–§18:** every run there predates the two fixes below. **Resolved in §19.5:** the BITs
+> inversion and the late collapse at 10/13 bits were the softmax normaliser bug, not precision.
+
+### 19.1 Gate B: gradient fidelity (`_gateB.py`)
+Identical weights are loaded into the float64 reference and the fixed-point model ([5,5,5], S=2^16, A=9).
+On 6 identical un-augmented batches we compare per-parameter gradients (cosine, norm ratio
+|g_q|/|g_f|). The comparison is done at two points: seed-0 init, and the converged float baseline.
+A correct simulator has ratio ≈ 1, and its cosine approaches 1 as BITs grows.
+
+**Before the fixes it did not converge.** At init the global cosine plateaued at **0.94 even at BITs=20**.
+At the converged weights, `stages.2.4.bn2` had a gradient **1.86× too large at both 13 and 16 bits**.
+Two precision-independent biases explained this:
+
+1. **Softmax normaliser (the consequential one).** `fixed_reciprocal` squared `inverse_sqrt` and came
+   out ~0.7 % low, so softmax rows summed to ~0.993. That leaves a seed gradient Σp − 1 ≈ −0.0057 per
+   sample that **never vanishes**: it keeps pushing the target logit up even on correctly classified
+   examples. On a converged batch (mean 1 − p_target = 0.029) it inflated the target-logit gradient
+   by 19 %. As the model grows confident late in training, this bias becomes as large as the true
+   signal. **It was ~3.5× smaller at BITs=8 (−0.0016) than at 10–16**, which matches which runs
+   collapsed. Fix: one Newton step y ← y(2 − dy) (`RECIP_NEWTON = 1`, standard in CrypTen/CryptGPU).
+   After the fix Σp − 1 ≈ −4e-5 and the target-column ratio is 1.000.
+2. **`inverse_sqrt` −0.4 % uniform bias** (BatchNorm). This caused the init cosine plateau. Fix: one
+   Newton step y ← y(3 − xy²)/2 (`ISQRT_NEWTON = 1`). The cost is negligible bandwidth (per-channel
+   vectors) plus a few rounds.
+
+**After both fixes:**
+
+| point | BITs | global cos | ratio | worst per-param cos |
+|---|---|---|---|---|
+| init | 8 / 10 / 13 / 16 | 0.33 / 0.71 / 0.96 / **0.994** | 0.99–1.01 | 0.17 / 0.60 / 0.94 / 0.992 |
+| converged | 8 / 10 / 13 / 16 | 0.39 / 0.94 / 0.996 / **0.999** | 1.74 / 1.05 / 0.98 / 1.00 | 0.38 / 0.89 / 0.993 / 0.998 |
+
+- There is no gradient-scale bug: the ratio is ≈ 1 at init at every precision. The simulator now
+  converges to float as BITs grows.
+- **8-bit gradients are unbiased but very noisy.** The per-batch cosine is 0.33, so the noise power
+  is ~8× the signal, and SGD averages it out over steps. At the converged float point the 8-bit
+  gradient is 3.6× larger per parameter. Rounding the weights to 2^-8 knocks the model off the minimum,
+  so this is a genuine precision effect, not a bug.
+
+### 19.2 Gate B: ring payload at BITs=8 (1-bit-slack truncation needs payload < 2^(l−1))
+
+| phase | init | converged | ring needed |
+|---|---|---|---|
+| forward | 2^22.9 | 2^25.0 | 26 |
+| backward | 2^31.6 | **2^32.5** | **34** |
+
+The hot spot is a direct `ring_truncate` inside a `backward`. BatchNorm's grad_mean / grad_std terms are
+the most likely site: they multiply a batch×spatial sum by `inv_var`. **32 bits is missed by ~2 bits,
+in the backward pass only.** Candidate fixes are S = 2^14, or applying part of the public /N before the
+`inv_var` multiply.
+
+**Why loss scaling is what shrinks the ring.** The payload is ≈ 2f + magnitude in the forward pass and
+≈ 2f + log2 S + magnitude in the backward pass. With f=16 and no S, the forward payload is 2^41
+(a 42-bit ring). Training without S needed f ≈ 22 (§3), which extrapolates to a ~54-bit ring. f=8 with
+S=2^16 gives 2^25 forward and 2^32.5 backward. **S lifts only the backward gradients, which are the
+only values that need it, whereas raising f inflates every product.**
+
+### 19.3 Gate A: cost of one training step (`_gateA.py`, 3-party replicated, semi-honest)
+Op counts on [5,5,5] at batch 128: **414.6 M truncated elements, 39.1 M ReLUs**, and 35 nonlinear
+calls of negligible size. These are priced with first-order per-operation formulas (header of
+`_gateA.py`). Network models: LAN 10 Gb/s with 0.2 ms RTT; WAN 1 Gb/s with 70 ms RTT.
+
+| config | online GB | offline GB | total vs ref | LAN s/step | WAN s/step | local-trunc failures/step |
+|---|---|---|---|---|---|---|
+| ref: l=64, f=16, local trunc | 21.7 | 0 | 1.00× | 17.7 | 296 | **~99** (payload 2^41) |
+| l=64, f=8 + S, local trunc | 21.7 | 0 | 1.00× | 17.7 | 296 | 0.27 |
+| l=34, TS{1} | 12.8 | 5.3 | 1.08–1.20× | 13.6–14.8 | 250–263 | exact |
+| l=34, TS{1} fused | 7.8–9.3 | 5.3 | 1.37–1.49× | 10.8–12.0 | 222–234 | exact |
+| l=32, TS{1} fused | 7.3–8.7 | 5.0 | 1.46–1.58× | 10.2–11.3 | 215–227 | exact |
+
+Ranges span the ReLU-cost variants. The reference config costs about 8.5 TB per epoch, so an 80-epoch
+run would be about 680 TB.
+
+**How the estimate is built.** Nothing is measured on a network; the simulator runs locally.
+1. *Op counts (measured).* One fwd+bwd step on the live model with the `OP_COUNTS` counters gives the
+   numbers of truncations, ReLUs and nonlinear calls (elements and SIMD calls).
+2. *Per-op cost (from the literature).* Each op is priced in bits sent by all parties at ring width l:
+
+| op | bits per element | rounds |
+|---|---|---|
+| multiply (reshare per output element) | 3l | 1 |
+| local truncation TS{L} | +l | 0 extra |
+| 1-bit-slack truncation TS{1} | 2l online (0 if fused) + 3l offline | 0 extra |
+| ReLU (MSB extraction + select) + bwd mask | 3l·log2 l + 6l, + 3l | log2 l + 2 |
+| inverse sqrt / exp / reciprocal | negligible | ~log2 l + 12 |
+
+   Worked example, reference config at l=64:
+   - multiplies: 3·64·414.6 M = 9.95 GB
+   - truncation: 64·414.6 M = 3.3 GB
+   - ReLU: (1152+384+192)·39.1 M = 8.45 GB
+   - **total ≈ 21.7 GB/step**, and rounds ≈ 824 + 36·8 + 35·18 ≈ 1,742.
+3. *Time (assumed networks).* time = bits / bandwidth + rounds × RTT, so LAN ≈ 17.4 + 0.35 s and
+   WAN ≈ 174 + 122 s.
+4. *TS{L} failures.* elements × 2^(payload + 1 − l), using the Gate B payload. For example,
+   414.6 M · 2^-22 ≈ 99 per step.
+
+**Reliability.** Ratios between configs are fairly robust, because every config is priced with the same
+formulas. Absolute numbers are order-of-magnitude:
+- The formulas are first-order, from the survey and not checked line by line against one
+  implementation. ReLU cost varies most across protocols.
+- Rounds count every SIMD call as sequential, so they are an upper bound: grad_input and grad_weight
+  can share a round.
+- Not modelled: compute time (Piranha: up to ~60 % of LAN time), the optimizer step (a few truncations
+  per parameter, small vs 415 M), malicious security, and softmax bandwidth.
+- Sanity check only: Piranha *measured* 4.4 GB/iter for VGG16, against our 21.7 GB estimate for
+  [5,5,5]. That is plausible, since BN roughly triples truncations per image, but it is not a validation.
+- **To firm this up:** MP-SPDZ's compiler reports communication and rounds statically for a program, and
+  HawkEye (USENIX Sec 2025) shows static profiles match real runs. Compiling the [5,5,5] training step
+  would replace these formulas with a real implementation's counts. Its emulator would also cross-check
+  the accuracy simulation.
+
+**Findings.**
+- **Lowering f alone saves nothing.** Cost depends on the ring and the protocol, not on f.
+- **A smaller ring is a 1.1–1.6× total-communication win, not 2×.** The 1-bit-slack truncation that
+  makes it possible moves cost into preprocessing. Counting online cost only, the win is 1.7–2.5×.
+- **On WAN, rounds dominate** (~1,700 sequential rounds per step, about 2 minutes at 70 ms). Ring size
+  only enters through log l, so it gains just 1.1–1.3×. WAN cost scales with depth (number of
+  BN/ReLU layers), not width.
+- **Local truncation on this net fails ~99 times per step even at l=64 with f=16**, because the payload
+  is 2^41. So the field's default config would itself need slack-free truncation on a deep BN network.
+- **Landing on exactly 32 matters for compute, not communication.** 34 vs 32 bits barely changes
+  communication, but 32 enables native int32 GPU kernels instead of emulated int64 (Piranha). Compute is
+  not modelled here.
+
+### 19.4 Getting the BITs=8 payload under 2^31 (toward a 32-bit ring)
+- **Loss scale is not the route.** BITs=8 with S=2^14 (A=7) trailed float by 3–6 pts from e3, then
+  collapsed to exactly chance (1.00/5.00) at e12 with no non-finite values. That run was stopped.
+- **Hot spot 1: BN backward (`grad_std` × `inv_var`, 2^31.6).** The fully deferred /N left a
+  batch×spatial sum of up to 2^15 elements in the product. `BN_EARLY_DIV_BITS = k` applies 2^k of the
+  public /N right after the sum and the remaining N/2^k at the end. With k=5 the BN sites drop to
+  ≤2^26.4. Gate B fidelity is unchanged (16-bit cos 0.994 at init / 0.999 converged).
+- **Hot spot 2, previously unmonitored: `div_public`.** It divided in float outside the ring model,
+  and the CE backward multiplied by S *before* dividing, a 2^(BITs+A+log2 S) = 2^33 intermediate.
+  `DIV_PUBLIC_RING = 1` routes the power-of-two part of every public divisor through `ring_truncate`
+  (an odd remainder becomes a public-reciprocal multiply plus truncate), and applies the CE's net
+  public shift A + log2 N − log2 S once. That shift is 0 at S=2^16, A=9, N=128.
+- **Gate B with both fixes:** the BITs=8 peak is 2^29.1 (Linear backward), so a 31-bit ring by the
+  6-batch measurement.
+- **In real training the peak is higher.** In a probe of 200 augmented training steps the only site
+  ≥ 2^29 is `LinearQ.backward`'s grad truncation, with max 2^31.35. Three elements out of 3.2e8 crossed
+  2^31, a rate of 9e-9, about 1 element per 70 steps. The 32-bit-ring run (`qcfix_b8_ring32`,
+  RING_BITS=32, genuine wraparound) logged OVF in e1 and peaked at 2^29.9 in e2. It is still training
+  normally (+0.90 at e2).
+
+### 19.5 Re-run with the fixes: the collapse was the softmax bug, and BITs=8 trains in a real 32-bit ring
+Same protocol as §16.2: [5,5,5], aug, lr 0.1 cosine, 80 ep, S=2^16, A=9, seed 0, `RECIP_NEWTON` =
+`ISQRT_NEWTON` = 1. Gaps are vs the float baseline at the same epoch (float e80 71.97, best 72.18).
+
+| epoch | 13 | 10 | 8 | 8 @ l=32 (k=5, ring div) | pre-fix 13 / 10 / 8 (§16.2) |
+|---|---|---|---|---|---|
+| e19 | +3.17 | +3.51 | +3.35 | +2.79 | +3.63 / +4.14 / +3.22 |
+| e39 | +4.25 | +4.38 | +3.64 | +3.92 | +4.39 / +3.45 / +2.27 |
+| e59 | +1.29 | +0.42 | +0.56 | −0.07 | −0.44 / +0.08 / −1.19 |
+| e69 | −0.46 | +0.23 | −0.83 | −0.82 | −7.55 / −5.55 / −0.95 |
+| e79 | −0.84 | −0.76 | −1.16 | −0.95 | −12.68 / −10.33 / −1.02 |
+| **final top-1** | **71.15** | **71.25** | **70.87** | **71.07** | 60.28 / 62.31 / 70.82 |
+
+**Findings.**
+- **The late collapse and the "fewer bits trains better" inversion (§16–§18) were the softmax
+  normaliser bug, not a precision effect.** With the Newton fix, 13 and 10 bits no longer degrade in
+  the decay phase: they gain +10.9 and +8.9 pts final. All precisions now land within ~1 pt of float.
+  BITs=8 is unchanged (its bias was ~3.5× smaller). The §17 gradient growth and the §18 13-bit
+  "non-freezing" were symptoms of the same bias.
+- **Precision is now nearly irrelevant across 8–13 bits** (70.9–71.3, single seed). The remaining
+  ~−1 pt gap appears at every precision, including 13 bits, whose gradients match float at cos 0.996
+  (§19.1). It may be seed noise or a precision-independent difference. Seeds are needed before
+  reading anything into it.
+- **BITs=8 trains end-to-end in a genuine 32-bit ring.** `RING_BITS=32` (real wraparound) with
+  `BN_EARLY_DIV_BITS=5` and `DIV_PUBLIC_RING=1` reached **71.07 %, −0.90 vs float**, matching the 57-bit
+  run. The payload overflowed in one epoch only (e1, 2^31.35 at the Linear-backward truncation, the
+  ~9e-9 per-element rate of §19.4). In every other epoch it peaked at 2^28.7–2^29.9, a margin of
+  1.1–2.3 bits. The lone wrap was harmless.
+- **The mid-training lead over float (+3 to +5 pts through ~e40) survived the fix**, so it is not the
+  softmax bias. It is still unexplained but transient: every run ends ~1 pt below float.
+
+**Still open before this is a deployable claim:**
+1. fixed-point master weights and optimizer (the update is still float64, §11.2);
+2. seeds;
+3. a 1-bit margin fix for the Linear-backward truncation, so that the rare wrap is eliminated rather
+   than tolerated;
+4. MP-SPDZ cross-check of the cost model (§19.3).
+
+### 19.6 Fixed-point optimizer — the whole training step in the ring
+`FixedSGD` (`simulate.py`, `_quant_converged.py` with `QC_FXOPT=1`) holds the master weights (2^F_W) and
+the momentum (2^F_V) as ring elements and runs torch's SGD update with ring ops:
+- the S-lifted gradient is read as g at 2^(BITs+log2 S) for free;
+- public constants are encoded as an 8-bit mantissa × 2^-e; μ·v is computed as v − (1−μ)·v;
+- each step publishes a fresh stochastic truncation of W to the 2^-BITs compute grid.
+
+In a 200-step unit test vs `torch.optim.SGD`, the displacement error is 9e-5 at F=24, 4e-4 at 20,
+6e-3 at 16 and 9 % at 12, and the run is unbiased at every precision. The extra cost is ~3 constant
+multiplies and ~3 truncations per parameter per step, about +6 % truncation bandwidth.
+
+Runs: BITs=8, S=2^16, l=32 (real wraparound), `BN_EARLY_DIV_BITS=5`, `DIV_PUBLIC_RING=1`, 80 epochs,
+seed 0.
+
+| F_W / F_V | e39 | e59 | e69 | e79 | **final** | gap | OVF epochs |
+|---|---|---|---|---|---|---|---|
+| float optimizer (§19.5) | +3.92 | −0.07 | −0.82 | −0.95 | **71.07** | −0.90 | e1 |
+| 20 / 20 | +4.44 | +0.08 | −0.66 | −0.80 | **70.89** | −1.08 | e1, e6 |
+| 20 / 16 | +3.83 | +0.28 | −1.14 | −1.16 | **70.99** | −0.98 | e1, e7 |
+| 12 / 16 | +2.81 | −0.46 | −1.03 | −1.39 | **70.66** | −1.31 | e1 |
+| 8 / 16 (no master copy) | +3.12 | −1.08 | −2.69 | −2.66 | **69.19** | −2.78 | e1 |
+
+**Findings.**
+- **The fully fixed-point training step works.** With every value, optimizer state included, in a
+  32-bit ring, 8-bit compute and 12–20-bit storage land within 0.1–0.4 pts of the float-optimizer run.
+  That is inside single-seed noise. The best fully-in-ring config (20/16) reaches 70.99 % vs float
+  71.97 %.
+- **A master copy is needed, but a short one.** With no master copy (F_W = BITs = 8), sub-grid updates
+  survive only through stochastic rounding. The run tracks the others until ~e49, then falls behind in
+  the cosine decay as updates shrink (−1.08 at e59 → −2.7 at e69–80), ending 1.9 pts below the
+  12-bit run. This is the §18 deadband becoming real once weights are *stored* on the grid. 12
+  fractional bits of storage recovers almost all of it.
+- **The optimizer adds no payload problem.** Every overflow is in e1–e7 at the Linear-backward
+  truncation (2^31.2–31.8), which overflows the same way under the float optimizer. All later epochs
+  peak at 2^28.4–2^30.0.
+- Still single seed.
+
+### 19.7 Seeds, the split fix, and the Keller & Sun control
+Final config: compute f=8, S=2^16, A=9, master weights f=20, momentum f=16 (`FixedSGD`), ring l=32,
+`BN_EARLY_DIV_BITS=5`, `DIV_PUBLIC_RING=1`, and **`LIN_GRAD_PRESHIFT=2`**. The last is the split
+truncation in `LinearQ.backward`: 2 bits off grad_output before the matmuls, BITs−2 after. Gate B
+fidelity is unchanged (16-bit cos 0.994 init / 0.999 converged). Each quant seed is paired with a
+float baseline of the same seed (same init and batch order; `_baseline_snapshot.py <out> <seed>`,
+`QC_SEED`).
+
+| seed | float e80 | fixed-point e80 | gap | overflow epochs | peak payload |
+|---|---|---|---|---|---|
+| 0 | 71.97 | 70.28 | −1.69 | 0 | 2^29.57 |
+| 1 | 71.68 | 70.77 | −0.91 | 0 | 2^29.05 |
+| 2 | 71.73 | 71.27 | −0.46 | 0 | 2^29.38 |
+| **mean ± sd** | **71.79 ± 0.16** | **70.77 ± 0.50** | **−1.02 ± 0.62** | **0 / 240** | ≤ 2^29.6 |
+
+> **SUPERSEDED (§21.6, §21.8):** these accuracies used a broken eval protocol (BN always in training
+> mode), and "0 overflows" is not reproducible across all runs. Final: 70.95 ± 0.03 at ℓ=35 (`RESULTS.md`).
+
+- **The gap is real but small: −1.0 ± 0.6 pts** (paired, n=3, standard error ≈ 0.36). The float
+  seed-to-seed spread is 0.16; the fixed-point spread is 0.50.
+- **The split fix removes the overflows.** No epoch of any seed reached 2^31 (240 epochs). The peak is
+  2^29.6, a margin of ≥ 1.4 bits. The whole training step is exact in a 32-bit ring.
+- Seed 0 here (70.28) is 0.7 below the §19.6 20/16 run (70.99). That run had no split fix, but the gap
+  is within the seed spread.
+
+**Keller & Sun control (S = 2^7, their implicit deferred-1/B lift).**
+- **The first attempt was confounded.** `_quant_converged.py` coupled A = log2 S − 7, so S=2^7 also
+  turned off the softmax elevation (A=0, the §13 forward floor). It trained at chance from e1, with
+  every epoch overflowing at ~2^54. `QC_A` now decouples A from S.
+- **S=2^7 still fails with A=9.** In a 32-bit ring, activations wrap at step 3 and then cascade.
+- **Diagnosis (ring 57, float SGD):** at step 0 the fixed-point gradient norm is **10–12× the float
+  gradient** for the stage-0 BN parameters, against ≤ 1.27× at S=2^16. Tiny true gradients rounded
+  stochastically on a 2^-15 effective grid give unbiased noise that swamps the signal. Pre-BN
+  activation std then grows ~1.4× per step (1.6 → 6.8 in 5 steps), against ~1.6 → 2.1 at S=2^16.
+- This is the precision floor, and it matches Keller & Sun's "f=8 diverges". **The extra 2^9 of
+  lift beyond B is what lets f=8 train.** A full ring-57 run (`ksctrl_S7_A9_r57.txt`) is in progress
+  to confirm divergence without ring wraparound.
+
+## 20. Prior-art audit — what is and is not new
+
+Done in two ways: a primary-source read of Falcon, Piranha, Keller & Sun (+ their 2023 note), Orca and
+eprint 2025/331, and an adversarial search (~30 queries, 2019–2026) for work contradicting each
+candidate claim. The search is good but not exhaustive, and workshop proceedings were not searched
+directly. **All of our results are MPC-faithful plaintext emulation, not runs of a secure protocol.**
+That is an accepted practice (Keller & Sun use MP-SPDZ's emulator for accuracy), but it is weaker than
+the real private runs reported by e.g. AriaNN, and every claim must say so.
+
+| claim | verdict | prior art |
+|---|---|---|
+| A. training converges near plaintext in a ring of ≤ 32 bits | **contradicted** at MNIST scale | **AriaNN** (PoPETs 2022, arXiv 2006.04593): Z_2^32 throughout; LeNet/MNIST trained from scratch *privately*, 99.2 % vs 99.3 % plaintext, ~10–13 fractional bits. Falcon is 32-bit, but its accuracies are inference of plaintext-trained models (confirmed in Keller & Sun §5.1.1). |
+| B. ResNet with BN trained from scratch; CIFAR-100 | **partly** | **QUOTIENT** (CCS 2019): fixed-point ResNet-20 *without* BN/avg-pool/softmax, on Skin-Cancer MNIST. **AriaNN**: ResNet18 with approximate BN on a small binary task, likely fine-tuning. **POSEIDON** (NDSS 2021, HE): plain CNN on CIFAR-100. CryptGPU: no BN support. None found for a BN-ResNet from scratch, or for CIFAR-100 under MPC numerics. |
+| C. loss scaling in MPC | **partly, closest relative is a special case** | Dedicated search (§20.1). **Keller & Sun (ICML 2022)** defer the 1/B division to the update: a fixed public lift of B = 2^7 on the backward pass, presented as postponing a division. **QUOTIENT**: WAGE-style dynamic max normalisation, which needs a private max. No explicit static loss scale was found in MPC, HE, FL or plaintext *fixed-point* training. It exists only for floating point (Micikevicius 2018; Wang et al. NeurIPS 2018, FP8 with S=1000). |
+| D. good accuracy with < 13 fractional bits | **partly** | **QUOTIENT**: ternary weights + 8-bit gradients/activations, MNIST-scale (99.38 % vs 99.48 %). **AriaNN**: ~10 bits, MNIST. For deeper nets the field reports the opposite (Keller & Sun: f=8 diverges; Piranha: ≥ 22–24; Pencil: f=25). |
+| E. biased reciprocal/softmax approximation causes late-training collapse | **failure observed, mechanism new** | **Spin** and **Orca**: Piranha's secure softmax (quadratic reciprocal) trains to ~10 %. Keller & Sun: softmax replacements hurt, and nearest rounding is biased. None identify approximation *bias* → non-vanishing seed gradient → late collapse. |
+| F. Piranha concluded 64-bit is necessary | **confirmed, with a hedge** | Piranha §6.4: "computation over 64-bit integers is not just desirable … but in fact, necessary … **or the use of adaptive fixed-point computation may be necessary**." Loss scaling is a static form of what Piranha anticipated. |
+| G. higher-precision master weights than compute weights | **contradicted in kind** | **QUOTIENT**: ternary compute weights + 8-bit SGD/AMSgrad weights in 2PC. Not new as an idea; at most our parameterisation (public-constant mantissa encoding, payload analysis) is. |
+
+### 20.1 Static loss scaling — dedicated prior-art check
+Full text was searched in 26 MPC/HE papers and 15 plaintext fixed-point/integer training papers, and the
+CrypTen, MP-SPDZ, SecretFlow-SPU, Falcon and AriaNN repos were grepped for loss/grad scaling (no hits).
+Not covered in full text: SecureML, ABY3, Trident, Tetrad, MPCLeague, PrivPy, Bicoptor, CrypTFlow2/Cheetah
+training, HFP8, and secure fine-tuning papers. Confidence that the technique is unpublished in MPC is
+moderately high; in HE and FL it is moderate.
+
+| area | static public loss scaling? | closest relative |
+|---|---|---|
+| MPC | not found | Keller & Sun's deferred 1/B (an implicit, fixed lift of B); QUOTIENT's private-max normalisation |
+| HE | not found | CKKS encoding scale Δ, which is a different mechanism |
+| FL + secure aggregation | not found | public 2^k integer encoding of updates, with no backprop through a grid |
+| plaintext fixed-point | not found | per-layer/block exponents (NITI, Flexpoint, HBFP, Zhang et al. CVPR 2020) and WAGE max-shifting. Zhao et al. (IJCAI 2020) list "fixed-point" loss scaling as future work. |
+| plaintext floating point | **yes** | Micikevicius et al. 2018 (FP16); Wang et al. 2018 (FP8, static S=1000); Mellempudi et al. 2019 (dynamic) |
+
+**Positioning.** Static loss scaling is known for floating point. Our contribution is applying it on a
+fixed-point grid inside MPC, where it costs nothing: S is public, so the scaling is a free shift with
+no secure max or exponent computation, unlike QUOTIENT / block-floating-point schemes. It
+**generalises Keller & Sun's deferred 1/B**: their implicit lift is B = 2^7, while our effective lift
+is S = 2^16 (2^9 beyond B). That extra lift is what lets f=8 train here, the setting Keller & Sun report
+diverges. Their f=8 result was on smaller networks, with their own setup and softmax, so this is
+suggestive rather than a controlled comparison. Must cite Keller & Sun, Micikevicius et al. and Wang et
+al. 2018.
+
+**Defensible claims, in this narrowed form:**
+1. In MPC-faithful emulation, a **33-conv-layer BatchNorm ResNet trained from scratch on CIFAR-100**
+   reaches within ~1 pt of float with **8 fractional bits in a 32-bit ring**. The prior 32-bit training
+   result (AriaNN) is LeNet/MNIST; deep CIFAR-scale training is otherwise at 64 bits with f = 16–26.
+2. **Static public loss scaling on a fixed-point grid in MPC** (known for floating point, §20.1) decouples
+   forward and backward precision at zero protocol cost. It generalises Keller & Sun's deferred 1/B, is
+   the simplest form of the "adaptive fixed point" Piranha suggested, and must be distinguished from
+   QUOTIENT's private-max normalisation.
+3. **Mechanism:** a ~0.7 % biased secure reciprocal leaves a non-vanishing softmax seed gradient that
+   grows relative to the true signal and collapses training late. This mimics a precision limit (§19).
+4. **Payload-aware truncation placement** (§19.4) and the cost accounting (§19.3).
+
+**Do not claim:** "first to train in a 32-bit ring", "first sub-13-bit secure training", "first
+master/compute weight split", or "first loss scaling-like gradient rescaling in MPC". Also do not claim
+results from a secure run: none exist yet. Must still be shown: seeds, the fixed-point optimizer at
+80 epochs, and ideally an MP-SPDZ cross-check.
+
+> **Since done:** seeds (§19.6, §21.8), the fixed-point optimizer at 80 epochs, the MP-SPDZ cross-check
+> (§21), and one real secure training step (§21.2). Updated prior-art check: §20.2.
+
+
+### 20.2 Second prior-art sweep (2019–2026) and the Keller & Sun erratum
+**Sweep verdict:** no prior work uses a static, public loss scale in fixed-point secure *training* to cut f
+or ℓ.
+- **Nearest work, none pre-empting:**
+  - BEACON (USENIX Sec '23): floating-point secure training, small CNNs.
+  - Truncation Untangled (ePrint 2024/1953): 32-bit shares, VGG-16 on ImageNet, **inference only**.
+  - Silenzio (arXiv 2504.17785): FHE, MLPs, dynamic secret scaling.
+  - Spin '24, Das et al. PoPETs '25: 64-bit default, small models.
+- **Evidence of the norm:** the SoK by Ng & Chow (S&P '23) says private training "usually uses the 64-bit
+  ring". Citable.
+- **Phrasing:**
+  - Claim "static public loss scale for fixed-point secure **training**, f 16→8, ℓ 64→35".
+  - Do not claim "first sub-64-bit training": AriaNN and Falcon used Z_2^32 on small nets.
+  - Avoid bare "gradient scaling", which names an attack in the MPC literature (ePrint 2025/906).
+- **Not verified:** Orca's parameters (PDF blocked).
+
+**Keller & Sun erratum (ePrint 2023/1219, Aug 2023), read in full:**
+- **What it fixes:** a max-pooling backward bug in MP-SPDZ. The gradient always went to one corner of the
+  pooling window.
+- **What changes:** with it fixed, f=16 secure training matches cleartext (LeNet on MNIST; AlexNet-like on
+  CIFAR-10). The "accuracy gap" of ICML'22 disappears.
+- **What it does not change:** the setup (f=16, k=31, mod 2^64) and the deferred 1/B (batch 128, i.e. an
+  implicit 2^7 lift, App. "to tackle the limited precision").
+- **What it does not revisit:** **f=8.** ICML'22 §5 says "we found that f = 8 leads to divergence", and
+  that statement was made with the buggy max-pooling.
+- **Attribution for the paper:** "Keller & Sun (2022) report that f=8 diverges; that finding predates their
+  2023 max-pooling fix and was not revisited." Our own control does not depend on it: f=8 with only the
+  implicit 2^7 lift fails both in our simulator and in MP-SPDZ 0.4.3 (§19.7, §21.5), on a network with
+  no max-pooling (GAP). It does not inherit their bug.
+
+## 21. MP-SPDZ cross-check (checks 1 & 2): static cost and a real 3-party run
+
+MP-SPDZ v0.4.3 (release binaries, `/home/ryan/mp-spdz-0.4.3`). `Programs/Source/resnet_step.mpc` builds
+**one training step of the exact simulator network** (torch.fx export of `CNNModelBaseline`, GAP as
+`AdaptiveAvgPool2d`) with MP-SPDZ's own ML library: `layers_from_torch` → `ml.SGD.fit`, batch 128,
+CIFAR-100 shapes, dummy data (cost is data-independent). Protocol: semi-honest 3-party replicated
+secret sharing over Z_2^l (`replicated-ring-party.x`, the ABY3 family assumed in §19.3).
+
+**Two library limitations had to be patched locally** (marked `LOCAL PATCH` in `Compiler/ml.py`):
+1. **No training of residual graphs.** The optimizer aliases each layer's output-gradient to its single
+   consumer, so at a fan-out (block input → conv1 *and* skip `Add`) one consumer's gradient silently
+   replaced the other's, and `Add.backward` wrote into the wrong buffer. The patch accumulates
+   gradients at fan-out points; this is local and free of communication. Sequential models are
+   unchanged.
+2. **No strided-conv input gradient** (`assert stride == (1, 1)`). The patch dilates nabla_Y by the
+   stride (zeros inserted locally) before the existing stride-1 transposed conv. Sizing it
+   padded − k + 1 covers odd sizes, the same output-padding issue as §15.2.
+
+These do not change what is communicated, only that the program compiles and runs. Gradient
+correctness of the patches is **not yet verified**; that belongs to check 3 (emulator vs torch).
+
+**MP-SPDZ's own ring constraints.** At f=8 it needs ≥ 33 bits for BN's one-shot public division by
+128·H·W (our §19.4 hot spot) and ≥ 35 = 2k+3 for its *secret* softmax division at k=16. Its SGD needs
+k + 31 bits unless public constants are set to low precision (`cfix.set_precision(f, k)`, analogous
+to our 8-bit-mantissa constants). The smallest ring MP-SPDZ accepts for this program is therefore
+**35**. The 64-bit reference uses f=16, k=31 (Keller & Sun's setting).
+
+### 21.1 Check 1 — static cost from the compiler (`compile.py -R l -E ring`)
+
+| network | l, f, k | online comm / step | prob. truncations | bit triples | VM rounds |
+|---|---|---|---|---|---|
+| [2,2,2] | 64, 16, 31 | 15.44 GB | 231.2 M | 2.35 G | 1.82 M |
+| [2,2,2] | 35, 8, 16 | **9.59 GB (1.61×)** | 231.0 M | 1.08 G | 1.79 M |
+| [5,5,5] | 64, 16, 31 | 34.06 GB | 507.5 M | 5.30 G | 3.99 M |
+| [5,5,5] | 35, 8, 16 | **21.08 GB (1.62×)** | 507.3 M | 2.45 G | 3.93 M |
+
+Symbolic cost (`--variable-cost`, [2,2,2]): 1.82e9·L + 7.0e9 bits online per step.
+
+### 21.2 Check 2 — real local run, [2,2,2], l=64, 16 threads per party
+**35.6 s and 14.88 GB sent in total (all parties) for one training step.** The compiler estimate of
+15.44 GB is within 3.6 % (an overestimate), which validates the static numbers of 21.1. MP-SPDZ also
+reported: *"The computation domain is too small for low-round truncation; it would need to have at
+least 103 bits"* (= 2k + κ + 1 with k = 31, κ = 40). So **even at 64 bits MP-SPDZ cannot use cheap
+low-round truncation for this network** and falls back to a slack-free one, which independently
+corroborates §19.3. A real l=35 run needs the VM rebuilt with `RING_SIZE=35`. The release binaries
+support only 64, and the build dependencies (libsodium, Boost.System/Thread, NTL) are not installed;
+this is pending.
+
+**Real l=35 run (done).** No sudo is available, so libsodium, GMP, Boost 1.92 and OpenSSL were installed
+from conda-forge into a user-space micromamba env (`~/micromamba/envs/mpspdz`). NTL is unused with
+`USE_NTL=0`. The system clang cannot find the libstdc++ headers, so both VMs were built with g++ in
+separate trees, leaving the release tree untouched:
+- `mp-spdz-r35/`: `RING_SIZE=35`;
+- `mp-spdz-r64gcc/`: the 64-bit control.
+
+One training step of [2,2,2], 3 parties on localhost, 16 threads, same compiler for both:
+
+| config | ring | time | global data sent | rounds (party 0) |
+|---|---|---|---|---|
+| Keller & Sun style (f=16, k=31) | 64 | 40.7 s | 14.88 GB | 1,850,135 |
+| ours (f=8, k=16) | **35** | 41.3 s | **9.25 GB** | 1,834,567 |
+
+- **Measured communication drops 1.61×** (static estimate: 1.62×). Rounds are essentially unchanged (−0.8%).
+- **Wall-clock time is the same.** On localhost the network is not the bottleneck, and the 35-bit
+  ring is still held in 64-bit machine words. The byte saving only becomes time on a bandwidth-bound
+  link (LAN/WAN). That can't be shown here without `tc` (root) or separate machines, so **we claim
+  communication, not speed.**
+- At l=35, MP-SPDZ again says low-round truncation would need ≥ 73 bits (2k+κ+1 with k=16), so both
+  configurations use the same truncation protocol family. The 1.61× is purely the ring width.
+- The release clang build at l=64 took 35.6 s (vs 40.7 s with g++). Times are only compared within the
+  same compiler.
+- **BN running stats at 2^-16 (the §21.6 fix) cost nothing in communication.** `ml.BN_STATS_F` (local
+  patch; `resnet_step ... bnf16`) holds the running stats as sint at 2^-16 with the r += round((b−r)·μ, f)
+  update. Measured at l=35: **9,252.24 MB vs 9,252.33 MB stock (−0.09 MB), identical rounds (1,834,567)**,
+  39.7 s vs 41.7 s (noise). It is marginally cheaper because it uses one truncation per element where the
+  stock rule uses two. The one-off 2^-8 eval copy (~5k elements) is not included.
+
+### 21.3 Comparison with our Gate A model (§19.3)
+
+| quantity, per step | Gate A | MP-SPDZ | ratio |
+|---|---|---|---|
+| truncations, [2,2,2] | 189.7 M elems | 231.2 M | 1.22× (MP-SPDZ also truncates in softmax/BN/SGD) |
+| truncations, [5,5,5] | 414.6 M elems | 507.5 M | 1.22× |
+| online comm, [5,5,5], l=64 | 21.7 GB | 34.1 GB | **Gate A underestimates by 1.57×** |
+| comm saving, small ring vs 64 | 1.1–1.6× total, 1.7–2.5× online | **1.62× online (at l = 35), 0 offline** | consistent |
+| rounds, small ring vs 64 | barely change (log l) | −1.4 % | consistent |
+
+**Findings.**
+- **The ring-size saving is confirmed by an independent implementation:** 1.61–1.62× less
+  communication per training step at MP-SPDZ's minimum ring (35) than at 64 bits, with rounds
+  essentially unchanged (WAN latency does not improve). Our Gate A range bracketed this.
+- **Gate A's absolute numbers are ~1.6× too low.** MP-SPDZ's comparison (bit-triple) circuits and
+  extra truncations cost more than the first-order formulas. Ratios are reliable; absolute numbers
+  should come from MP-SPDZ from now on.
+- **Wall-clock reality (local loopback, no network latency):** 35.6 s per [2,2,2] step at 64 bits.
+  80 epochs × 391 steps ≈ 12.9 days for the smaller net, before any WAN latency.
+- **Important caveat on "32 bits":** MP-SPDZ sizes rings from *worst-case* bounds (ring ≥ 2k, k
+  covering every value's range). Our 32-bit result rests on *measured* payloads (§19.4: max 2^29.6
+  over 240 epochs, 0 overflows), not a proof. Under MP-SPDZ's generic bounds our S-lifted gradients
+  (values up to ~2^24 at f=8) would need k ≈ 25 and a ring of ~53 bits. A deployment at 32 bits must
+  either accept a measured, data-dependent bound or add range checks.
+
+### 21.4 Check 3a — the port and the patches are numerically correct
+`Programs/Source/gradcheck.mpc` runs one forward+backward in the emulator with torch's weights loaded,
+then reveals every parameter gradient. `_mpspdz_gradcheck.py` compares them with torch float64, using the
+same network exec'd from the same source, MP-SPDZ's BN semantics (unbiased variance) and the sum-loss
+(deferred 1/B).
+- **test net** `res`: stride-2 stem on an odd 15×15 input, an identity block, a stride-2 block with a 1×1
+  projection, GAP, and a residual MLP block. It exercises both patches.
+- **control** `seq`: sequential, stride 1. It uses neither patch.
+
+**Harness bug found on the way.** `sint.input_tensor_via(..., one_hot=True)` sizes the one-hot by the
+largest label *present*, so 8 random labels gave fewer than 10 columns and garbage gradients. Labels
+are now built explicitly with 10 columns. (`resnet_train.mpc` builds 100 columns explicitly.)
+
+| config | worst cosine | max rel. err | notes |
+|---|---|---|---|
+| res, f=16, approx BN | 0.952 | 31 % | approximation-limited |
+| res, f=16, precise BN | 0.99925 | 2 % | |
+| **res, f=24, precise BN (l=128)** | **1.00000** | **1.5e-4** | **all 26 tensors; patches exact** |
+| seq, f=16, precise BN, N·H·W = 392 / 1800 / 2048 | 0.997 / 0.941 / 0.901 | 9 % / 37 % / 46 % | error grows with BN reduction size |
+| seq, f=24, precise BN, N·H·W = 2048 | 1.00000 | 1e-3 | |
+
+- **The two patches (fan-out gradient routing and the strided-conv input gradient) are exact.**
+- **The f=16 control error is MP-SPDZ's own precision limit, not the patches.** It is in the
+  *unpatched* sequential net, it grows with the BN reduction size, and it vanishes at f=24.
+  Early-layer gradients are tiny relative to the 2^-16 grid, and BN's backward sums thousands of
+  rounded products. This is the backward-precision floor that loss scaling targets (§8–§9),
+  observed independently.
+
+### 21.5 Check 3b — training agreement (complete: all three arms reproduce)
+`resnet_train.mpc` trains [2,2,2] with MP-SPDZ's own numerics in the emulator. `_mpspdz_match.py` is the
+simulator counterpart under the identical recipe:
+- same data and fixed batch order (`opt.shuffle=False`), same seed-0 init (loaded via `input_via`);
+- no augmentation, constant lr 0.05, momentum 0.9, no weight decay;
+- weights at f with no master copy; A=0 softmax; precise BN with eps = max(1e-5, 2^-f).
+
+Loss-scale mapping: MP-SPDZ seed (p−y)·2^LS corresponds to our S = 2^(7+LS). LS=0 is Keller & Sun's
+implicit lift; a third local patch adds `ml.LOSS_SCALE_BITS` (seed × 2^LS, update truncation + LS).
+
+**Forward agreement check:** on batch 0 with identical weights, MP-SPDZ f=16 gives loss 4.67033 vs an
+exact float 4.67044.
+
+Simulator side, 5 epochs:
+
+| config | mean train loss e1 → e5 | test top-1 e5 |
+|---|---|---|
+| f=16, lift 2^7 (Keller & Sun) | 3.80 → 2.03 | 37.55 |
+| **f=8, lift 2^7** | 4.66 → 4.69 (never learns) | **1.00** |
+| **f=8, lift 2^16 (ours)** | 3.75 → 2.04 | **38.91** |
+
+MP-SPDZ emulator results (test top-1 per epoch; about 8.5 h each, run three in parallel):
+
+| config | e1 | e2 | e3 | e4 | e5 | simulator e5 |
+|---|---|---|---|---|---|---|
+| **f=8, LS=9 (S=2^16)** | 17.00 | 26.66 | 33.26 | 36.40 | **38.79** | **38.91** |
+| f=8, LS=0 (S=2^7) | fails ×6 | — | — | — | best 2.70 | 1.00 |
+| f=16, LS=0 (control) | fails ×5 | — | — | — | best ~1.0 | 37.55 |
+| **f=16, LS=0, k=47 (control rerun)** | 16.01 | 25.18 | 31.90 | 35.73 | **37.87** | **37.55** |
+
+- **f=8 with loss scaling: confirmed by an independent implementation.** MP-SPDZ's own softmax, BN,
+  probabilistic truncation and SGD track the simulator epoch by epoch (e1 17.0 vs 16.2; e5 38.8 vs 38.9).
+  Training loss falls 4.60 → about 3.3 in e1, as in the simulator.
+- **f=8 without the extra lift fails in MP-SPDZ too, but differently.** It blows up (loss ~10^5, then NaN)
+  instead of stalling at chance.
+  - **MP-SPDZ's fit has a built-in safeguard:** if test accuracy is below 1.2× chance after an epoch,
+    it halves the lr and re-initialises.
+  - It fired 6 times, down to lr 0.0039. The best epoch reached 2.7%, so the run never learned at any lr.
+  - Because of these resets, failing runs leave the shared recipe after their first failure.
+- **The f=16 control does not train in MP-SPDZ** (negative losses, i.e. wraparound, at every lr down
+  to 0.0016), although it trains in the simulator. f=16 with k=31 leaves 15 integer bits; the likely
+  cause is a range overflow in MP-SPDZ's softmax/BN path, not a precision effect. **Not yet diagnosed.**
+  Next step: rerun with k=47. Until then the control arm is missing, so the comparison is half-controlled.
+  The positive result (f=8 + S trains and matches the simulator) does not depend on it.
+- **k=47 rerun (in progress, `emu_train_222_f16_k47_ls0.txt`): the control now trains.** Loss is
+  4.670 → about 3.9 by batch 110 (simulator: 4.04 mean at b51–100). The k=31 run had blown up by batch 40.
+  So the k=31 failure was range overflow (15 integer bits at f=16), not precision. **Final (5 epochs, 9.7 h):
+  16.01 / 25.18 / 31.90 / 35.73 / 37.87 vs simulator 16.22 / 24.62 / 30.60 / 35.49 / 37.55** — within 1.3 pt
+  every epoch, no lr resets.
+- **Check 3b complete: all three arms agree between implementations.** f=16 with the implicit 2^7 lift trains
+  (37.9 vs 37.6); f=8 with the same lift does not (MP-SPDZ best 2.7%, simulator 1.0%); f=8 with S=2^16
+  trains and matches f=16 (38.8 vs 38.9). Precision is the variable and loss scaling is the fix, in both
+  MP-SPDZ's numerics and ours.
+
+### 21.6 Evaluation-protocol issue found during the port (affects §16–§19 mid-training gaps)
+`BatchNorm2dQ` hard-codes `training = True`, so `evaluate()` scores the fixed-point model with each *test
+batch's own* statistics, while the float baseline is scored in eval mode with *running* statistics.
+At high lr the running averages lag the weights, which plausibly explains the unexplained +3 to +7 pt
+mid-training "lead" over float (§19.5) and its disappearance as lr → 0. The final-epoch gaps are less
+affected, but test-batch statistics are mildly transductive. **To do:** evaluate both models the same
+way (running stats for both, or batch stats for both) and re-report the gaps.
+
+**Worse than first described (found while fixing):** because eval also ran the training branch, every
+`evaluate()` call *updated the running stats from test batches*, and the eval-mode branch was dead code
+(it read float running stats as if they were fixed-point and referenced an undefined `inv_var`). Training
+itself is unaffected (it always uses batch stats, and the running stats never feed the gradient), so the
+§19.6 trajectories are valid; **only the reported fixed-point accuracies are suspect.** All §16–§19
+quant top-1 numbers, including the headline 70.77 ± 0.50, are therefore *provisional* until re-scored.
+
+**Fix (`simulate.py`):** `BatchNorm2dQ.forward` takes `training` from the module's mode. In eval it
+encodes the running stats onto the 2^-BITs grid, clamps the variance ≥ 1 ulp like the batch path, and
+normalises with them. Check (`[2,2,2]`, f=8, 30 shared train batches): running stats match float to
+within grid error. Eval logits are within 10% (relative) of the float model's on the same weights. Eval
+no longer modifies the buffers.
+
+**Re-score:** the trained models were not saved, so the three §19.6 seeds are rerun with an identical
+config (`evalfix_s{0,1,2}.txt`; models saved to `checkpoints/quant_final_s*.pt`). Each epoch logs
+running-stat top-1 (the fair protocol, same as float) *and* batch-stat top-1 (the old protocol, buffers
+restored afterwards), so the size of the bias is measured directly.
+
+**Results (e80, [5,5,5], f=8, F_W=20, F_V=16, ℓ=32, 0 overflows in all runs):**
+
+| seed | float (running stats) | fixed, old protocol (batch stats) | fixed, stored running stats | fixed, recalibrated stats | float, recalibrated |
+|---|---|---|---|---|---|
+| 0 | 71.97 | 70.06 | 68.89 | 71.27 | 72.06 |
+| 1 | 71.68 | 70.05 | 68.62 | 70.62 | 71.74 |
+| 2 | 71.73 | 70.58 | 69.35 | 71.28 | 71.72 |
+| mean ± sd | 71.79 ± 0.16 | 70.23 ± 0.30 | **68.95 ± 0.37** | **71.06 ± 0.38** | 71.84 ± 0.19 |
+
+- **The mid-training "lead" was an artifact of the old protocol.** Under the fair protocol the gap is
+  negative at almost every logged epoch.
+- **The old protocol flattered the fixed-point models**, by about 1.3 points relative to their own stored stats.
+- **Training-accumulated stats lose 2.8 points, but the cause is the BN statistics, not the weights.**
+  Running stats were accumulated on the 2^-8 compute grid. In the s0 model, 456 of 4,928 channels (9%) end
+  with a stored running variance ≤ 0, and 1,616 (33%) are below 4 grid steps. Small-variance channels are
+  effectively destroyed. `_bn_eval_diag.py` re-estimates the stats once after training (population
+  mean/var over the augmented train set) and evaluates the *same weights*: **71.06 ± 0.38, paired gap
+  −0.78 ± 0.34 vs float** with the identical recalibration (`_bn_eval_float_recal.py`). Recalibration
+  does nothing for float (71.84 vs 71.79), so this is a fixed-point storage effect.
+- Folding BN into per-channel scale/shift held at 2^-16 with recalibrated stats gives 70.75 ± 0.37:
+  usable, but no better than the plain 2^-8 path once the stats are good.
+- **Corrected headline:** 71.06 ± 0.38 vs 71.79 ± 0.16 (gap −0.78 ± 0.34). This is with a post-hoc stats
+  pass, which costs one forward-only epoch (about a third of a training epoch) in MPC. It replaces the
+  provisional 70.77 ± 0.50 / −1.02 gap.
+- **The proper fix: accumulate running stats at storage precision.** `BN_STATS_F=16` (`QC_BNF`) holds the
+  running mean/var at 2^-16, like the momentum buffer. The batch sum (2^8) and sum of squares (2^16) are
+  exact ring values, so the higher-precision batch stats cost nothing extra. The update is r + μ(b − r)
+  with one truncation, payload about 2^23. Eval still encodes the stats at 2^-8.
+- **Proxy for the rerun (`_bn_stats_proxy.py`, measured).** The running stats are an EMA with a
+  ~20–40-batch memory, and the e80 lr is about 4e-5, so the stats a rerun ends with ≈ the saved final
+  weights run forward (no updates) over one augmented training epoch with the in-training rule.
+  - **Validation:** the old 2^-8 rule reproduces the measured result, 69.12 vs 68.95 (per seed
+    +0.18 / −0.15 / +0.46). The proxy is faithful to about 0.5 points.
+
+  | seed | float | 2^-8 rule (proxy) | **2^-16 rule (proxy)** | dead channels (var ≤ 0), 2^-8 → 2^-16 |
+  |---|---|---|---|---|
+  | 0 | 71.97 | 69.07 | **71.04** | 440 → 0 |
+  | 1 | 71.68 | 68.47 | **70.81** | 462 → 0 |
+  | 2 | 71.73 | 69.81 | **71.28** | 520 → 0 |
+  | mean ± sd | 71.79 ± 0.16 | 69.12 ± 0.67 | **71.04 ± 0.24** | |
+
+  **With the stats accumulated during training at 2^-16, the predicted gap is −0.75 ± 0.26**, the same as
+  the idealised recalibration (71.06). No post-hoc pass is needed. This is a measured proxy, not a rerun:
+  the full 3-seed rerun with `QC_BNF=16` is pending free GPUs (another user's job occupies all 8).
+- **Full rerun (done, `bnf16_s{0,1,2}.txt`, models `checkpoints/quant_bnf16_s*.pt`).** Identical to §19.6
+  except `BN_STATS_F=16`; scored with running stats, exactly as float.
+
+  | seed | float e80 | **fixed e80 (running stats, 2^-16)** | gap | old batch-stat protocol (for reference) |
+  |---|---|---|---|---|
+  | 0 | 71.97 | **71.20** | −0.77 | 70.04 |
+  | 1 | 71.68 | **70.92** | −0.76 | 70.53 |
+  | 2 | 71.73 | **70.96** | −0.77 | 70.29 |
+  | mean ± sd | 71.79 ± 0.16 | **71.03 ± 0.15** | **−0.77 ± 0.01** | 70.29 ± 0.25 |
+
+  **This is the corrected headline result:** f=8 compute, F_W=20 / F_V=16 / BN stats at 2^-16, ℓ=32,
+  same eval protocol as float, no post-hoc pass. It matches the proxy (71.04) and the recalibration
+  (71.06). Under the fair protocol the fixed-point models now score *higher* than under the old one.
+- *(Line numbers refer to `simulate.py` after the 2026-10-26 comment cleanup; `ovfhunt_s0.txt` logs the
+  pre-cleanup numbers: `:979` = `:883`, `:635` = `:603`.)*
+- **One overflow, localised (`ovfhunt_s0.txt`).** The seeded replay of bnf16 seed 0 reproduced the run
+  exactly (all e1–e8 accuracies, and 2^31.23 at e8). Per-site logging pins the event to **e8, batch 8,
+  BN backward `simulate.py:883`**: the `grad_std · inv_var` product, taken before the deferred 1/n
+  division. It is large when a channel has small variance (large inv_var) and a large x_norm.
+  - **It is a data-dependent tail, not a truncation fault.** The simulated truncation is the 1-bit-slack
+    protocol, exact up to ±1 ulp for in-range inputs; upstream rounding is ±1 ulp. The input really was
+    2^31.23, so it really wrapped (the simulator reduces mod 2^32, like MPC shares), and training absorbed it.
+  - **Correction to the text above:** "all other epochs ≤ 2^29.6" was wrong (a parsing error on my side).
+    Distribution of per-epoch peaks over all 720 epochs (§19.6 + evalfix + bnf16):
+    median 2^28.92, p90 2^29.41, p99 2^30.18, max 2^31.23; 11 epochs ≥ 2^30, 1 epoch ≥ 2^31.
+  - **Where the tail lives:** 10 of the 11 epochs ≥ 2^30 come from the conv backward truncation
+    (`simulate.py:603`, up to 2^30.75); the single overflow comes from BN backward (`:883`).
+  - **Headroom (the 1-bit-slack protocol needs payload < 2^(ℓ−1)):** ℓ=32: −0.23 bits (the edge);
+    ℓ=33: +0.77; **ℓ=35: +2.77** (corrected from "≥ 3.8"). *Superseded by §21.7: the worst payload is
+    2^32.14, so ℓ=35 has 1.86 bits.*
+  - **Cheap remedies, not yet tested:**
+    - raise `BN_EARLY_DIV_BITS` 5 → 6–7, which halves or quarters the `:883` payload for free;
+    - S=2^15, which takes 1 bit off every backward payload for free, if it is inside the working
+      S window (still unmapped);
+    - a conv `grad_output` pre-shift fixes `:603` but adds a truncation per backward element, so it is
+      **not** free in communication.
+
+### 21.7 Loss-scale window with the BN-backward fix (`ssweep_S*.txt`)
+Seed 0, the bnf16 config plus `BN_EARLY_DIV_BITS=7` (the §21.6 overflow fix), softmax elevation pinned at
+A=9 so that S is the only variable. 80 epochs, scored with running stats; float e80 = 71.97.
+
+| log2 S | e80 top-1 | gap | peak payload | epochs ≥ 2^30 | overflow epochs (≥ 2^31) |
+|---|---|---|---|---|---|
+| 13 | 1.11 | collapse | 2^55 | — | every epoch |
+| 14 | ~0.8 (killed at e72) | collapse | 2^55 | — | from e2 |
+| 15 | ~1.1 (killed at e72) | collapse | 2^55 | — | from e5 |
+| **16** | **71.28** | **−0.69** | **2^29.68** | **0** | **0** |
+| 17 | 71.76 | −0.21 | 2^31.13 | 20 | 1 |
+| 18 | 71.75 | −0.22 | 2^31.96 | 80 | 16 |
+
+- **The fix works.** At S=2^16 the peak drops from 2^31.23 (bnf16_s0, K=5) to 2^29.68, so ℓ=32 has 1.3
+  bits of headroom with zero overflows. Accuracy is unchanged (71.28 vs 71.20).
+- **The lower edge is sharp:** 2^16 trains and 2^15 collapses, so the operating point sits at the edge.
+  Confound: K=7 drops 2 more bits in the BN gradient, which could raise the edge. The control,
+  **S=2^15 with K=5, is running** (`ssweep_S15_k5.txt`).
+- **Above 2^16 accuracy holds, even through wraps.** 2^18 wrapped in 16 epochs at ℓ=32 and still reached
+  71.75. Single seed: differences under ~0.5 points (−0.69 vs −0.21) are noise. The faithful rings are
+  ℓ ≥ 33 for 2^17 and ℓ ≥ 34 for 2^18.
+- **K follow-up (`ssweep_S1{5,6}_k{5,6}*.txt`; K = `BN_EARLY_DIV_BITS`, the bits of the BN-backward
+  1/n division applied right after the per-channel sum).** The first S=2^15 / K=5 run died silently
+  (SIGKILL-like, no traceback) after e14; it was rerun as `_r2`.
+
+  | log2 S | K | e80 top-1 | gap | peak payload | overflow epochs |
+  |---|---|---|---|---|---|
+  | 15 | 5 | 69.24 | −2.73 | 2^28.78 | 0 |
+  | 15 | 6 | 68.97 | −3.00 | 2^29.08 | 0 |
+  | 15 | 7 | collapse | — | 2^55 | from e5 |
+  | 16 | 5 | 71.20 | −0.77 | 2^31.23 (BN `:883`) | 1 (e8) |
+  | 16 | 6 | 70.46 | −1.51 | **2^32.14** (e4) | 1 (e4) |
+  | 16 | 7 | 71.28 | −0.69 | 2^29.68 | 0 |
+
+  - **The lower edge is soft, not sharp, and K moves it.** S=2^15 trains at K≤6, but about 2 points
+    worse than S=2^16. K=7 starves the BN gradient enough to collapse it.
+  - **S=2^16 is the accuracy point.** All three K values train there.
+  - **K alone cannot make ℓ=32 safe.** The K=6 run overflowed at e4 with 2^32.14, the largest payload seen
+    so far. Its site was not logged, but K only touches the BN site; the bnf16 replay showed e4–e6 tails
+    at the conv backward (`:603`, up to 2^30.75). The likely reading is the conv tail on a different random
+    trajectory, and K=7's clean run was partly luck. Across the 5 S=2^16 runs at ℓ=32 with the full
+    recipe, 2 had an overflow epoch.
+  - **Corrected ring requirement:** the worst observed payload is 2^32.14, so the 1-bit-slack protocol
+    needs **ℓ ≥ 34**. ℓ=35 has **1.86 bits** of headroom (corrected again from 2.77). Every training run
+    absorbed its wraps, but ℓ=32 cannot be called MPC-faithful.
+- **Reading (revised):** recommend S=2^16, K=5, at **ℓ=35**: 71.03 ± 0.15 over 3 seeds, the measured 1.61×
+  communication saving, and ≥ 1.9 bits of headroom over every payload observed in all runs. ℓ=32 trains
+  (it absorbed every wrap) but is not faithful.
+
+### 21.8 Headline at ℓ=35, no wraps (`r35_s{0,1,2}.txt`, models `checkpoints/quant_r35_s*.pt`)
+The bnf16 recipe (f=8, F_W=20, F_V=16, BN stats 2^-16, S=2^16, K=5, A=9) with `RING_BITS=35`. That is the
+ring MP-SPDZ requires for f=8/k=16, and the one measured at 1.61× less communication (§21.2).
+
+| seed | float e80 | **fixed e80, ℓ=35** | gap | peak payload | wraps (≥ 2^34) | same seed at ℓ=32 (bnf16) |
+|---|---|---|---|---|---|---|
+| 0 | 71.97 | **70.98** | −0.99 | 2^31.23 | 0 | 71.20 (1 wrap, e8) |
+| 1 | 71.68 | **70.92** | −0.76 | 2^30.74 | 0 | 70.92 (no wrap) |
+| 2 | 71.73 | **70.96** | −0.77 | 2^30.18 | 0 | 70.96 (no wrap) |
+| mean ± sd | 71.79 ± 0.16 | **70.95 ± 0.03** | **−0.84 ± 0.13** | | **0** | 71.03 ± 0.15 |
+
+- **Headline: 70.95 ± 0.03 vs float 71.79 ± 0.16, gap −0.84 ± 0.13, with zero wraps.** Every truncation
+  input is inside the 1-bit-slack correctness range, so this result is MPC-faithful and correct.
+- **Consistency check:** seeds 1 and 2 never wrapped at ℓ=32, and they reproduce **bit-identically** at
+  ℓ=35 (70.92 and 70.96, with identical payload traces). So ring width affects the computation only
+  through wraps, exactly as it should. Seed 0 follows the same trajectory up to its e8 wrap and then
+  diverges (71.20 → 70.98, within seed noise).
+- Headroom on these runs: ≥ 2.77 bits. Against the worst payload seen in any run (2^32.14, §21.7):
+  1.86 bits.
+
 ---
 
 ### Artifacts
@@ -1163,10 +1882,22 @@ below the log's 3-decimal resolution.
   grad norm through the divergence (§17)
 - `_deadband.py <BITS> <snapshot> [EPOCHS]` — per-step/per-epoch rounded-weight change fraction and
   update size in grid steps (§18)
+- `_gateB.py <snapshot> [NBATCH]` (env `GB_BITS`, `GB_LOGS`, `GB_POINTS`) — per-parameter fixed-point vs
+  float64 gradient cosine/ratio at identical weights + ring payload by phase/call site (§19)
+- `mp-spdz-0.4.3/Programs/Source/gradcheck.mpc` + `_mpspdz_gradcheck.py <seq|res>` — patch/port gradient check vs torch (§21.4)
+- `mp-spdz-0.4.3/Programs/Source/resnet_train.mpc` + `_mpspdz_match.py` — MP-SPDZ vs simulator training agreement (§21.5)
+- `_bn_eval_diag.py <seed>` — BN eval-protocol diagnostic on saved f=8 models: stored / batch / recalibrated / folded-2^-16 (§21.6)
+- `_bn_eval_float_recal.py <seed> <snapshot>` — same post-hoc BN recalibration for the float baseline (§21.6)
+- `_bn_stats_proxy.py <seed>` — in-training BN stat rule (2^-8 vs 2^-16) replayed on the saved final models (§21.6)
+- `mp-spdz-r35/`, `mp-spdz-r64gcc/` — g++ builds of `replicated-ring-party.x` at l=35 / l=64 against `~/micromamba/envs/mpspdz` (§21.2)
+- `mp-spdz-0.4.3/Programs/Source/resnet_step.mpc <blocks> <f> <k> [threads]` — one MP-SPDZ training step of the simulator network (§21); logs in `checkpoints/logs/mpspdz/`
+- `_gateA.py [BITS]` — measured op counts × per-op 3PC cost formulas → GB/rounds/LAN/WAN per step (§19)
 
 **Code knobs added:** `SOFTMAX_EXTRA_BITS` (forward softmax scale `A`, default 0, §13), `RING_BITS`
 (ring bit-width, default 57, §14), `GLOBAL_AVG_POOL` (default True), `STAGE_BLOCKS` / `STAGE_WIDTHS` /
 `MLP_BLOCKS` (depth, §15.2), and `augment_batch` (on-GPU train-time augmentation, §15.3) in
-`simulate.py`. The two §13/§14 knobs are inert at their defaults.
+`simulate.py`. The two §13/§14 knobs are inert at their defaults. `RECIP_NEWTON` / `ISQRT_NEWTON`
+(default 1, §19) add Newton refinement to the softmax reciprocal / BatchNorm inverse-sqrt; set 0 to
+reproduce pre-§19 runs.
 
 **Recommendations, code-change log, and open TODOs:** see `RECOMMENDATIONS.md`.

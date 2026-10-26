@@ -1,0 +1,365 @@
+diff -ruN a/CONFIG.mine b/CONFIG.mine
+--- a/CONFIG.mine	1969-12-31 16:00:00.000000000 -0800
++++ b/CONFIG.mine	2026-10-26 01:48:43.706659108 -0700
+@@ -0,0 +1,9 @@
++# Local build config (BITS_REPORT §21.2). Libraries come from a user-space micromamba env, since no sudo:
++#   micromamba create -n mpspdz -c conda-forge libsodium gmp libboost-devel openssl yasm
++# The system clang lacked libstdc++ headers here, hence g++. Ring width: `make RING_SIZE=64 ...` for the control.
++MPSPDZ_ENV ?= $(HOME)/micromamba/envs/mpspdz
++RING_SIZE ?= 35
++MY_CFLAGS += -DRING_SIZE=$(RING_SIZE) -I$(MPSPDZ_ENV)/include
++MY_LDLIBS += -L$(MPSPDZ_ENV)/lib -Wl,-rpath,$(MPSPDZ_ENV)/lib
++CXX = g++
++MY_CFLAGS += -Wno-error
+diff -ruN a/Compiler/ml.py b/Compiler/ml.py
+--- a/Compiler/ml.py	2026-10-26 01:48:43.690659094 -0700
++++ b/Compiler/ml.py	2026-10-26 01:48:43.694659097 -0700
+@@ -249,6 +249,11 @@
+         self.alloc()
+         return super(Tensor, self).randomize(*args, **kwargs)
+ 
++# LOCAL PATCH (BITS_REPORT §21.5): static public loss scale (bits) on the softmax seed gradient.
++# 0 = upstream behaviour (implicit lift = batch size, Keller & Sun's deferred 1/B).
++LOSS_SCALE_BITS = 0
++BN_STATS_F = 0   # LOCAL PATCH (BITS_REPORT §21.6): BN running-stat precision; 0 = stock sfix rule
++
+ class Layer:
+     n_threads = 1
+     inputs = []
+@@ -647,7 +652,12 @@
+         @for_range_opt_multithread(self.n_threads, len(batch))
+         def _(i):
+             div = softmax_from_exp(self.exp[i])
+-            self.nabla_X[i][:] = -self.Y[batch[i]][:] + div
++            g = -self.Y[batch[i]][:] + div
++            if LOSS_SCALE_BITS:
++                # LOCAL PATCH (BITS_REPORT §21.5): static public loss scale 2^LOSS_SCALE_BITS on the seed
++                # gradient (an exact public shift); removed again in SGD._update's truncation.
++                g = g * cint(2 ** LOSS_SCALE_BITS)
++            self.nabla_X[i][:] = g
+         self.maybe_debug_backward(batch)
+ 
+     def maybe_debug_backward(self, batch):
+@@ -1630,6 +1640,8 @@
+         self.var, self.mu, self.weights, self.bias = arrays
+         arrays = (sfix.Array(shape[2]) for i in range(4))
+         self.mu_hat, self.var_hat, self.nabla_weights, self.nabla_bias = arrays
++        if BN_STATS_F:   # LOCAL PATCH (§21.6): high-precision running stats, allocated outside the method tape
++            self.mu_hat_s, self.var_hat_s = sint.Array(shape[2]), sint.Array(shape[2])
+         self.epsilon = 2 ** (-sfix.f * 2 // 3 + 1)
+         self.momentum = 0.1
+         if args != None:
+@@ -1652,6 +1664,9 @@
+         self.weights.assign_all(1)
+         self.mu_hat.assign_all(0)
+         self.var_hat.assign_all(0)
++        if BN_STATS_F:
++            self.mu_hat_s.assign_all(0)
++            self.var_hat_s.assign_all(0)
+ 
+     def _output(self, batch, mu, var):
+         factor = sfix.Array(len(mu))
+@@ -1686,7 +1701,19 @@
+                 self.var.assign_vector(
+                     self.var.get_vector(base, size) / (len(batch) * d - 1),
+                     base)
+-            for x, y, in (self.mu_hat, self.mu), (self.var_hat, self.var):
++            if BN_STATS_F:
++                # LOCAL PATCH (BITS_REPORT §21.6): running stats held as sint at 2^-BN_STATS_F (storage
++                # precision) instead of sfix at 2^-f. Update r += round((b - r) * mom, f): one public
++                # multiply (local) + one truncation per element, vs two of each in the stock rule.
++                # Cost check only: the 2^-f eval copy (mu_hat/var_hat) is refreshed once after
++                # training (~5k elements), which this does not do.
++                sh = BN_STATS_F - sfix.f
++                mom = int(round(self.momentum * 2 ** sfix.f))
++                for x, y in (self.mu_hat_s, self.mu), (self.var_hat_s, self.var):
++                    b = y.get_vector().v * (2 ** sh); r = x.get_vector()
++                    x.assign_vector(r + ((b - r) * mom).round(sfix.k + sh + sfix.f, sfix.f))
++            else:
++              for x, y, in (self.mu_hat, self.mu), (self.var_hat, self.var):
+                 x[:] = self.momentum * y[:] + (1 - self.momentum) * x[:]
+             self._output(batch, self.mu, self.var)
+             if self.print_random_update:
+@@ -2357,7 +2384,23 @@
+             self.nabla_weights.assign_vector_by_indices(reduced, j, None, None, i)
+ 
+         if compute_nabla_X:
+-            assert tuple(self.stride) == (1, 1)
++            # LOCAL PATCH (BITS_REPORT §21): strided convs. For stride s the input gradient is the
++            # stride-1 transposed conv of nabla_Y DILATED by s (nabla_Y[o] placed at o*s, public zeros
++            # between) -- zero insertion is local/free, so communication is unchanged in kind. The
++            # dilated size padded - k + 1 also covers odd (in + 2p - k), i.e. torch's output_padding.
++            grad_src, grad_h, grad_w = self.nabla_Y, output_h, output_w
++            if tuple(self.stride) != (1, 1):
++                grad_h = inputs_h + 2 * padding_h - weights_h + 1
++                grad_w = inputs_w + 2 * padding_w - weights_w + 1
++                dilated = MultiArray([N, grad_h, grad_w, n_channels_out], sfix)
++                dilated.assign_all(0)
++                @for_range_opt_multithread(self.n_threads, [N, output_h])
++                def _(i, oh):
++                    @for_range(output_w)
++                    def _(ow):
++                        dilated[i][oh * stride_h][ow * stride_w].assign_vector(
++                            self.nabla_Y[i][oh][ow].get_vector())
++                grad_src = dilated
+             reverse_weights = MultiArray(
+                 [n_channels_in, weights_h, weights_w, n_channels_out], sfix)
+             @for_range_opt_multithread(self.n_threads, n_channels_in)
+@@ -2382,9 +2425,9 @@
+                                        [N, n_channels_in])
+             def _(i, j):
+                 res = sint(size = (padded_w * padded_h))
+-                conv2ds(res, self.nabla_Y[i].get_vector().pre_mul(),
++                conv2ds(res, grad_src[i].get_vector().pre_mul(),
+                         reverse_weights[j].get_vector().pre_mul(),
+-                        padded_h, padded_w, output_h, output_w,
++                        padded_h, padded_w, grad_h, grad_w,
+                         weights_h, weights_w, 1, 1, n_channels_out,
+                         weights_h - 1, weights_w - 1, 1)
+                 output.assign_vector_by_indices(
+@@ -3430,6 +3473,32 @@
+     @_no_mem_warnings
+     def backward(self, batch):
+         """ Compute backward propagation. """
++        # LOCAL PATCH (BITS_REPORT §21): gradient routing for non-sequential graphs (residual nets).
++        # Upstream aliases inputs[0].nabla_Y to the consumer's nabla_X, which is only correct when each
++        # layer output has ONE consumer; with fan-out (block input -> conv1 and -> skip Add) the later
++        # alias silently replaces the earlier, and Add.backward wrote into inp.nabla_X. Here: a layer
++        # output consumed more than once gets its own nabla_Y, and every consumer ADDS into it (local,
++        # communication-free); single-consumer outputs keep the original aliasing.
++        n_cons = {}
++        for l in self.layers:
++            for inp in (l.inputs or []):
++                if inp is not None:
++                    n_cons[id(inp)] = n_cons.get(id(inp), 0) + 1
++        started = set()
++        def route(inp, grad):
++            if n_cons.get(id(inp), 0) <= 1:
++                inp.nabla_Y.address = grad.address
++                return
++            if id(inp) not in started:
++                inp.nabla_Y.alloc()
++            first = id(inp) not in started
++            started.add(id(inp))
++            @multithread(self.n_threads, grad.total_size())
++            def _(base, size):
++                g = grad.get_vector(base, size)
++                if not first:
++                    g = g + inp.nabla_Y.get_vector(base, size)
++                inp.nabla_Y.assign_vector(g, base)
+         for i, layer in reversed(list(enumerate(self.layers))):
+             assert len(batch) <= layer.back_batch_size
+             if self.time_layers:
+@@ -3437,13 +3506,15 @@
+             if not layer.inputs:
+                 layer.backward(compute_nabla_X=False,
+                                batch=self.batch_for(layer, batch))
++            elif isinstance(layer, Add):
++                for inp in layer.inputs:      # d(sum)/d(input) = identity for every input
++                    route(inp, layer.nabla_Y)
+             else:
+                 if len(layer.inputs) == 1:
+                     layer.nabla_X.alloc()
+                 layer.backward(batch=self.batch_for(layer, batch))
+                 if len(layer.inputs) == 1:
+-                    layer.inputs[0].nabla_Y.address = \
+-                        layer.nabla_X.address
++                    route(layer.inputs[0], layer.nabla_X)
+                     if i == len(self.layers) - 1 and self.early_division:
+                         layer.nabla_X.assign_vector(
+                             layer.nabla_X.get_vector() / len(batch))
+@@ -4033,8 +4104,8 @@
+                 # assuming rate is already synchronized
+                 pre_trunc = diff.v.mul(rate.v, sync=False)
+                 momentum_value.assign_vector(diff, base)
+-                k = max(nabla_vector.k, rate.k) + rate.f
+-                m = rate.f + int(log_batch_size)
++                k = max(nabla_vector.k, rate.k) + rate.f + LOSS_SCALE_BITS
++                m = rate.f + int(log_batch_size) + LOSS_SCALE_BITS   # LOCAL PATCH: undo the loss scale
+                 if self.early_division:
+                     v = pre_trunc
+                 else:
+diff -ruN a/Programs/Source/gradcheck.mpc b/Programs/Source/gradcheck.mpc
+--- a/Programs/Source/gradcheck.mpc	1969-12-31 16:00:00.000000000 -0800
++++ b/Programs/Source/gradcheck.mpc	2026-10-26 01:48:43.702659104 -0700
+@@ -0,0 +1,76 @@
++# BITS_REPORT §21.4 (check 3a): numerical check of the two local ml.py patches. One forward+backward in
++# the emulator with torch's weights loaded (input_via=0); reveal every parameter gradient. The torch
++# reference is _mpspdz_gradcheck.py in the main repo.
++#   'seq': sequential, stride-1 control net (uses NEITHER patch) -> baseline MP-SPDZ-vs-torch agreement
++#   'res': residual + stride-2 + 1x1 projection + residual MLP block (exercises BOTH patches)
++# args (after the program name): <seq|res>
++program.options_from_args()
++from Compiler import ml
++import torch, torch.nn as nn, numpy
++F_, K_ = (24, 48) if 'f24' in program.args else (16, 31)
++sfix.set_precision(F_, K_); cfix.set_precision(F_, K_)
++mode = program.args[1]
++torch.manual_seed(0)
++
++class Block(nn.Module):
++    def __init__(s, cin, cout, stride):
++        super().__init__()
++        s.c1 = nn.Conv2d(cin, cout, 3, stride, 1, bias=False); s.b1 = nn.BatchNorm2d(cout)
++        s.c2 = nn.Conv2d(cout, cout, 3, 1, 1, bias=False); s.b2 = nn.BatchNorm2d(cout)
++        s.r1 = nn.ReLU(); s.r2 = nn.ReLU()
++        s.down = stride != 1 or cin != cout
++        if s.down:
++            s.dc = nn.Conv2d(cin, cout, 1, stride, 0, bias=False); s.db = nn.BatchNorm2d(cout)
++    def forward(s, x):
++        o = s.b2(s.c2(s.r1(s.b1(s.c1(x)))))
++        return s.r2(o + (s.db(s.dc(x)) if s.down else x))
++
++class Res(nn.Module):
++    def __init__(s):
++        super().__init__()
++        s.stem = nn.Conv2d(3, 8, 3, 2, 1, bias=False); s.sb = nn.BatchNorm2d(8); s.sr = nn.ReLU()  # 15 -> 8 (odd!)
++        s.blk1 = Block(8, 8, 1); s.blk2 = Block(8, 16, 2)                                           # 8 -> 4
++        s.pool = nn.AdaptiveAvgPool2d((1, 1))
++        s.f0 = nn.Linear(16, 32); s.r0 = nn.ReLU()
++        s.m1 = nn.Linear(32, 32); s.mr = nn.ReLU(); s.m2 = nn.Linear(32, 32); s.mo = nn.ReLU()
++        s.out = nn.Linear(32, 10)
++    def forward(s, x):
++        x = s.blk2(s.blk1(s.sr(s.sb(s.stem(x)))))
++        x = s.r0(s.f0(torch.flatten(s.pool(x), 1)))
++        x = s.mo(s.m2(s.mr(s.m1(x))) + x)
++        return s.out(x)
++
++class Seq(nn.Module):
++    def __init__(s):
++        super().__init__()
++        s.c1 = nn.Conv2d(3, 8, 3, 1, 1, bias=False); s.b1 = nn.BatchNorm2d(8); s.r1 = nn.ReLU()
++        s.c2 = nn.Conv2d(8, 8, 3, 1, 1, bias=False); s.b2 = nn.BatchNorm2d(8); s.r2 = nn.ReLU()
++        s.pool = nn.AdaptiveAvgPool2d((1, 1))
++        s.f0 = nn.Linear(8, 32); s.r0 = nn.ReLU(); s.out = nn.Linear(32, 10)
++    def forward(s, x):
++        x = s.r2(s.b2(s.c2(s.r1(s.b1(s.c1(x))))))
++        return s.out(s.r0(s.f0(torch.flatten(s.pool(x), 1))))
++
++net = Res() if mode == 'res' else Seq()
++B, H = 8, (7 if 'h7' in program.args else 16 if 'h16' in program.args else 15)                                   # odd input size exercises the stride-2 output-padding case
++x = torch.randn(B, 3, H, H); y = torch.randint(0, 10, (B,))
++torch.save({'state': net.state_dict(), 'x': x, 'y': y, 'mode': mode},
++           __import__('os').environ.get('GRADCHECK_OUT', '/home/ryan/checkpoints') + '/mpspdz_gradcheck_%s.pt' % mode)
++
++samples = sfix.input_tensor_via(0, numpy.moveaxis(x.numpy(), 1, -1))
++labels = sint.input_tensor_via(0, numpy.eye(10, dtype=numpy.int64)[y.numpy()])   # explicit 10 columns: one_hot=True sizes by max label present
++layers = ml.layers_from_torch(net, samples.shape, B, input_via=0)
++if 'precise' in program.args:                  # exact 1/sqrt in BN (layers_from_torch never passes it)
++    from Compiler import mpc_math
++    for l in layers:
++        if isinstance(l, ml.BatchNorm):
++            l.approx = False; l.InvertSqrt = lambda v: 1 / mpc_math.sqrt(v)
++opt = ml.SGD(layers)
++layers[0].X = samples          # same wiring as ml.SGD.fit
++layers[-1].Y = labels
++batch = regint.Array(B); batch.assign(regint.inc(B))
++opt.forward(batch=batch, training=True)
++opt.backward(batch=batch)
++for i, l in enumerate(layers):
++    for j, g in enumerate(l.nablas()):
++        print_ln('GRAD %s %s %s %s', i, type(l).__name__, j, g.get_vector().reveal())
+diff -ruN a/Programs/Source/resnet_step.mpc b/Programs/Source/resnet_step.mpc
+--- a/Programs/Source/resnet_step.mpc	1969-12-31 16:00:00.000000000 -0800
++++ b/Programs/Source/resnet_step.mpc	2026-10-26 01:48:43.698659100 -0700
+@@ -0,0 +1,43 @@
++# MP-SPDZ cross-check (BITS_REPORT §21): ONE secure training step of the exact simulate.py ResNet
++# (CIFAR-100, batch 128, residual BasicBlocks, BN, GAP, residual MLP head) for static cost analysis and
++# a real local 3-party run. Values are dummy (cost is data-independent).
++# args (after the program name): <blocks e.g. 555> <f> <k> [threads]
++program.options_from_args()
++from Compiler import ml
++import sys, torch
++import os
++sys.path.insert(0, os.environ.get('SIMULATE_DIR', '/home/ryan'))   # dir containing simulate.py
++import simulate
++
++blocks = [int(c) for c in program.args[1]]
++f, k = int(program.args[2]), int(program.args[3])
++try:
++    ml.set_n_threads(int(program.args[4]))
++except IndexError:
++    pass
++sfix.set_precision(f, k)
++cfix.set_precision(f, k)   # public constants (lr etc.) at the same precision; default cfix needs ~k+31 ring bits in SGD
++simulate.STAGE_BLOCKS = blocks; simulate.GLOBAL_AVG_POOL = True
++for a in program.args:                      # 'bnf16': BN running stats at 2^-16 (BITS_REPORT §21.6)
++    if a.startswith('bnf'): ml.BN_STATS_F = int(a[3:])
++
++class Export(simulate.CNNModelBaseline):
++    # identical to the simulator's float baseline; GAP via AdaptiveAvgPool2d so torch.fx sees a module
++    def __init__(self):
++        super().__init__()
++        self.pool = torch.nn.AdaptiveAvgPool2d((1, 1))
++    def _gap(self, x):
++        return torch.flatten(self.pool(x), 1)
++
++B = 128
++net = Export()
++samples = sfix.Tensor([B, 32, 32, 3]); samples.assign_all(0)
++labels = sint.Tensor([B, 100]); labels.assign_all(0)
++layers = ml.layers_from_torch(net, samples.shape, B)
++if 'show' in program.args:
++    for i, l in enumerate(layers):
++        ins = [layers.index(x) for x in (l.inputs or []) if x in layers]
++        print('%3d %-16s in=%-10s Y=%s' % (i, type(l).__name__, ins, list(l.Y.sizes) if hasattr(l, 'Y') else '-'))
++print('layers:', len(layers), 'params: %.2fM' % (sum(p.numel() for p in net.parameters()) / 1e6))
++optimizer = ml.SGD(layers)
++optimizer.fit(samples, labels, epochs=1, batch_size=B, program=program, print_accuracy=False)
+diff -ruN a/Programs/Source/resnet_train.mpc b/Programs/Source/resnet_train.mpc
+--- a/Programs/Source/resnet_train.mpc	1969-12-31 16:00:00.000000000 -0800
++++ b/Programs/Source/resnet_train.mpc	2026-10-26 01:48:43.694659097 -0700
+@@ -0,0 +1,53 @@
++# BITS_REPORT §21.5 (check 3b): train the simulator's ResNet with MP-SPDZ's OWN fixed-point numerics (its
++# softmax, BN, probabilistic truncation, SGD) in the emulator, to test the central claim independently:
++# f=8 needs loss scaling beyond Keller & Sun's implicit 2^7 lift.
++# Same data, same order (simulate.load_data, seed 0, no shuffle, no augmentation) and same seed-0 init
++# as the simulator; constant lr, momentum 0.9, no weight decay (MP-SPDZ's SGD has none).
++# args (after the program name): <blocks> <f> <k> <loss-scale bits> <epochs> <lr*1000> <threads>
++program.options_from_args()
++from Compiler import ml, mpc_math
++import sys, torch, numpy
++import os
++sys.path.insert(0, os.environ.get('SIMULATE_DIR', '/home/ryan'))   # dir containing simulate.py
++import simulate
++
++blocks = [int(c) for c in program.args[1]]
++f, k, LS = int(program.args[2]), int(program.args[3]), int(program.args[4])
++epochs, lr = int(program.args[5]), int(program.args[6]) / 1000
++ml.set_n_threads(int(program.args[7]))
++sfix.set_precision(f, k); cfix.set_precision(f, k)
++ml.LOSS_SCALE_BITS = LS
++simulate.STAGE_BLOCKS = blocks; simulate.GLOBAL_AVG_POOL = True
++
++torch.manual_seed(0)
++tl, te = simulate.load_data(128)
++def stack(loader):
++    xs, ys = zip(*[(x, y.argmax(1)) for x, y in loader])
++    x = torch.cat(xs).numpy(); y = torch.cat(ys).numpy()
++    return numpy.moveaxis(x, 1, -1), numpy.eye(100, dtype=numpy.int64)[y]
++xtr, ytr = stack(tl); xte, yte = stack(te)
++print('train', xtr.shape, 'test', xte.shape)
++
++class Export(simulate.CNNModelBaseline):
++    def __init__(self):
++        super().__init__()
++        self.pool = torch.nn.AdaptiveAvgPool2d((1, 1))
++    def _gap(self, x):
++        return torch.flatten(self.pool(x), 1)
++torch.manual_seed(0)
++net = Export()                                  # seed-0 init, identical to the simulator's runs
++
++train_x = sfix.input_tensor_via(0, xtr, binary=True); train_y = sint.input_tensor_via(0, ytr, binary=True)
++test_x = sfix.input_tensor_via(0, xte, binary=True); test_y = sint.input_tensor_via(0, yte, binary=True)
++layers = ml.layers_from_torch(net, train_x.shape, 128, input_via=0)
++for l in layers:
++    if isinstance(l, ml.BatchNorm):            # precise 1/sqrt; eps at one grid step (torch's 1e-5 < 2^-f)
++        l.approx = False; l.InvertSqrt = lambda v: 1 / mpc_math.sqrt(v)
++        l.epsilon = max(1e-5, 2 ** -f)
++opt = ml.SGD(layers)
++opt.shuffle = False                             # simulator order: batch i is the same batch in both
++opt.set_learning_rate(lr)
++for y in opt.momentum_values: y.assign_all(0)
++for y in opt.delta_thetas: y.assign_all(0)
++opt.fit(train_x, train_y, epochs=epochs, batch_size=128, validation_data=(test_x, test_y),
++        program=program, reset=False, print_loss=True)

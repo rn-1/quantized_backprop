@@ -1,0 +1,1 @@
+seed 0 F=0 top1 69.07 (running_var<=0: 440/4928) | F=16 top1 71.04 (running_var<=0: 0/4928)

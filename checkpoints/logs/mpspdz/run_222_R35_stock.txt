@@ -1,0 +1,13 @@
+Running /home/ryan/mp-spdz-r35/Scripts/../replicated-ring-party.x 0 -R 35 resnet_step-222-8-16-16 -pn 12402 -h localhost
+Running /home/ryan/mp-spdz-r35/Scripts/../replicated-ring-party.x 1 -R 35 resnet_step-222-8-16-16 -pn 12402 -h localhost
+Running /home/ryan/mp-spdz-r35/Scripts/../replicated-ring-party.x 2 -R 35 resnet_step-222-8-16-16 -pn 12402 -h localhost
+Trying to run 35-bit computation
+Using SGD
+done with epoch 0
+The following benchmarks are including preprocessing (offline phase).
+Time = 41.6566 seconds 
+Data sent = 2705.81 MB in ~1834567 rounds (party 0 only; rounds counted double due to multi-threading; use '-v' for more details)
+Global data sent = 9252.33 MB (all parties)
+The compiler overestimated the communication.
+The computation domain is too small for low-round truncation; it would need to have at least 73 bits.
+This virtual machine was compiled with GCC. Recompile with 'CXX = clang++' in 'CONFIG.mine' for optimal performance.
