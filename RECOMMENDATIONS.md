@@ -3,7 +3,7 @@
 > **Superseded (2026-10-26).** Written before the final results; several recommendations and TODOs are
 > obsolete. See `RESULTS.md` for current claims and `REPRODUCE.md` for how to rerun them.
 
-*Actionable companion to `BITS_REPORT.md` (the findings report). Section references (§) point into
+*Actionable companion to `BITS_NOTEBOOK.md` (the lab notebook). Section references (§) point into
 that report.*
 
 ---
@@ -145,7 +145,7 @@ that report.*
       (likely `fc1`, fan-in 50176). Would localise where truncation noise accumulates.
 
 ### SMPC realism — what this simulation does NOT model (for a faithful cost/security story)
-- [ ] **Secure softmax / cross-entropy (PRIORITY — see BITS_REPORT §11.1).** `CrossEntropyLoss` runs
+- [ ] **Secure softmax / cross-entropy (PRIORITY — see BITS_NOTEBOOK §11.1).** `CrossEntropyLoss` runs
       on **clear float64**: the per-sample max, `exp`, sum, and reciprocal are exact, and so is the
       seed gradient `(softmax−onehot)/N` handed to `fc3` backward. A real run needs secure **max**,
       **exp**, and **reciprocal**. This is the *only* unmodeled op that injects error into the
@@ -157,7 +157,7 @@ that report.*
       end-to-end). Three nonlinear primitives are **stubbed in the clear** and need real
       implementations: `secure_max` (DReLU/comparison tree), `fixed_exp` and `fixed_reciprocal`
       (range-reduce + polynomial, mirroring `inverse_sqrt`). Not yet swapped into `train_model`.
-- [ ] **Fixed-point optimizer (momentum + update) (BITS_REPORT §11.2).** `optimizer.step()` is stock
+- [ ] **Fixed-point optimizer (momentum + update) (BITS_NOTEBOOK §11.2).** `optimizer.step()` is stock
       float64 SGD. `μ=0.9` and `lr=1e-3` are non-power-of-two public constants → each is a fixed-point
       public multiply **+ truncation** on the ring, and the momentum buffer must be ring-resident.
       Adds ~2 truncations/param-tensor/step (absent from §7.2) and a truncation-free momentum buffer

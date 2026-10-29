@@ -55,18 +55,29 @@ if SITE_THR is not None:
         for k, lv in top: log('SITETOP e%d 2^%.3f m=%d %s' % (ep, lv, k[1], k[0]))
         _ep_site.clear()
 LR, MOM, WD, EPOCHS, N_BATCH = 0.1, 0.9, 5e-4, 80, 128
+import os as _os2
+EPOCHS = int(_os2.environ.get('EPOCHS', EPOCHS))   # cosine schedule length (default 80; Tiny-ImageNet runs use 40)
 dev = torch.device('cuda')
 simulate.STAGE_BLOCKS = [5,5,5]; simulate.GLOBAL_AVG_POOL = True
+# DATASET=tinyimagenet: 200 classes, 64x64. Its cache stays on the CPU (float64 on-GPU would be ~9.8 GB per
+# run) and each batch is moved over in the loop; for CIFAR the .to(dev) calls below are no-ops.
+DATASET = os.environ.get('DATASET', 'cifar100'); simulate.set_dataset(DATASET)
+cache = torch.device('cpu') if DATASET == 'tinyimagenet' else dev
+# §23 ablation knobs: BLOCKS (e.g. 555, 999) and RESIDUAL (1 = skip connections, 0 = plain network)
+BLOCKS = [int(c) for c in os.environ.get('BLOCKS', '555')]; simulate.STAGE_BLOCKS = BLOCKS
+simulate.RESIDUAL = bool(int(os.environ.get('RESIDUAL', 1)))
 simulate.BITs = BITS; simulate.B_IV = BITS; simulate.SOFTMAX_EXTRA_BITS = A
 
 def log(s): sys.stderr.write(s + '\n'); sys.stderr.flush()
 snap = torch.load(SNAP); base_acc = snap['acc']; base_final = snap['final_params']
 assert snap.get('seed', 0) == SEED, 'snapshot seed %s != QC_SEED %d' % (snap.get('seed', 0), SEED)
+for k, mine, default in (('dataset', DATASET, 'cifar100'), ('blocks', BLOCKS, [5,5,5]), ('residual', simulate.RESIDUAL, True)):
+    assert snap.get(k, default) == mine, 'snapshot %s %s != this run %s' % (k, snap.get(k, default), mine)
 
 torch.manual_seed(SEED)
 tl, te = load_data(N_BATCH)
-train = [(x.to(dev).to(torch.float64), y.to(dev).argmax(1)) for x,y in tl]
-test  = [(x.to(dev), y.argmax(1).to(dev)) for x,y in te]
+train = [(x.to(cache).to(torch.float64 if cache == dev else torch.float32), y.to(dev).argmax(1)) for x,y in tl]
+test  = [(x.to(cache), y.argmax(1).to(dev)) for x,y in te]
 
 def evaluate(m, batch_stats=False):
     # §21.6: eval mode = BN normalises with the running stats (same protocol as the float baseline).
@@ -76,7 +87,7 @@ def evaluate(m, batch_stats=False):
     m.train() if batch_stats else m.eval(); c1=c5=n=0
     with torch.no_grad():
         for x,tgt in test:
-            lo=m(x.to(torch.float64)); c1+=(lo.argmax(1)==tgt).sum().item()
+            lo=m(x.to(dev).to(torch.float64)); c1+=(lo.argmax(1)==tgt).sum().item()
             c5+=(lo.topk(5,1).indices==tgt.unsqueeze(1)).any(1).sum().item(); n+=x.shape[0]
     for b, s in zip(m.buffers(), bufs): b.copy_(s)
     return 100*c1/n,100*c5/n
@@ -97,15 +108,15 @@ else:
     sq = torch.optim.lr_scheduler.CosineAnnealingLR(oq, T_max=EPOCHS)
 log('QC SEED=%d RECIP_NEWTON=%d ISQRT_NEWTON=%d BN_EARLY_DIV_BITS=%d RING_BITS=%d DIV_PUBLIC_RING=%d LIN_GRAD_PRESHIFT=%d' % (SEED, simulate.RECIP_NEWTON, simulate.ISQRT_NEWTON, simulate.BN_EARLY_DIV_BITS, simulate.RING_BITS, simulate.DIV_PUBLIC_RING, simulate.LIN_GRAD_PRESHIFT))
 log('QC FXOPT=%d%s BN_STATS_F=%d' % (FXOPT, (' F_W=%d F_V=%d' % (FW, FV)) if FXOPT else '', simulate.BN_STATS_F))
-log('QC BITs=%d S=2^%d A=%d [5,5,5] aug lr=%g cosine %d ep  (%.2fM params)'
-    % (BITS, int(math.log2(S)), A, LR, EPOCHS, sum(p.numel() for p in mq.parameters())/1e6))
+log('QC BITs=%d S=2^%d A=%d %s%s %s aug lr=%g cosine %d ep  (%.2fM params)'
+    % (BITS, int(math.log2(S)), A, BLOCKS, '' if simulate.RESIDUAL else ' PLAIN(no skips)', DATASET, LR, EPOCHS, sum(p.numel() for p in mq.parameters())/1e6))
 log('QC ep | base t1/t5 | quant t1/t5 | t1 gap | nonfin | sec | payload | batch-stat t1 (old protocol)')
 Sf = float(S)
 for ep in range(1, EPOCHS+1):
     t0=time.time(); mq.train(); nonfin=0
     if FXOPT: oq.lr = lr_at(ep)
     for bi,(x,tgt) in enumerate(train):
-        oq.zero_grad(); out=mq(augment_batch(x)); loss=cross_entropy_q(out,tgt); (Sf*loss).backward()
+        oq.zero_grad(); out=mq(augment_batch(x.to(dev).to(torch.float64))); loss=cross_entropy_q(out,tgt); (Sf*loss).backward()
         if not FXOPT:                                  # FixedSGD consumes the S-lifted grad directly
             with torch.no_grad():
                 for p in mq.parameters():
@@ -119,6 +130,17 @@ for ep in range(1, EPOCHS+1):
         % (ep, b1,b5, q1,q5, q1-b1, nonfin, time.time()-t0, math.log2(P) if P > 0 else 0,
            ' OVF' if P >= 2**(simulate.RING_BITS-1) else '', qb1))
     if SITE_THR is not None: _ep_report(ep)
+    if os.environ.get('QC_BNDIAG'):   # §22: BN running-stat ranges + weight magnitudes (no RNG consumed)
+        with torch.no_grad():
+            bns = [(n, b) for n, b in mq.named_modules() if isinstance(b, simulate.QBatchNorm2d)]
+            rv = torch.cat([b.running_var for _, b in bns]); rm = torch.cat([b.running_mean for _, b in bns])
+            worst = max(bns, key=lambda nb: nb[1].running_var.max().item())
+            wmax = max(p.detach().abs().max().item() for p in mq.parameters())
+            gmax = max(b.weight.detach().abs().max().item() for _, b in bns)
+            log('BNDIAG e%d | running_var min %.3g max %.3g (%s) | var<=0: %d/%d | |running_mean| max %.3g | |param| max %.3g | |BN gamma| max %.3g'
+                % (ep, rv.min().item(), rv.max().item(), worst[0], (rv <= 0).sum().item(), rv.numel(), rm.abs().max().item(), wmax, gmax))
+    if os.environ.get('QC_SAVE_EVERY') and os.environ.get('QC_SAVE'):
+        torch.save({'state': mq.state_dict(), 'seed': SEED, 'epoch': ep}, os.environ['QC_SAVE'] + '.e%d' % ep)
     if ep >= int(os.environ.get('QC_EPOCHS', EPOCHS)): log('QC STOP after e%d (QC_EPOCHS)' % ep); break
 # final param RMSE vs baseline
 tot=totref=0.0

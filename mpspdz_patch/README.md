@@ -1,4 +1,4 @@
-# MP-SPDZ 0.4.3 patch (BITS_REPORT §21)
+# MP-SPDZ 0.4.3 patch (BITS_NOTEBOOK §21)
 
 `mp-spdz-0.4.3-bits.patch` turns a stock MP-SPDZ 0.4.3 release into the tree used for the §21 cross-check.
 

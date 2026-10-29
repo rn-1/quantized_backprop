@@ -1,0 +1,14 @@
+BS baseline [5,5,5] tinyimagenet 8.71M  aug lr=0.1 cosine 40 ep
+BS e1   | t1  4.81 / t5 17.73 | 23s
+BS e5   | t1 21.48 / t5 48.76 | 23s
+BS e10  | t1 29.27 / t5 56.74 | 23s
+BS e15  | t1 35.26 / t5 63.72 | 23s
+BS e20  | t1 41.32 / t5 69.40 | 23s
+BS e25  | t1 42.79 / t5 70.21 | 23s
+BS e30  | t1 47.83 / t5 73.09 | 23s
+BS e35  | t1 54.85 / t5 77.65 | 24s
+BS e38  | t1 57.68 / t5 79.71 | 23s
+BS e39  | t1 58.15 / t5 79.88 | 23s
+BS e40  | t1 58.15 / t5 80.00 | 24s
+BS best t1 58.15 (e39) -> saved checkpoints/baseline_tiny_s1.pt
+BS DONE

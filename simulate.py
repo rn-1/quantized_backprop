@@ -1102,6 +1102,20 @@ GLOBAL_AVG_POOL = True
 STAGE_BLOCKS = [2, 2, 2]
 STAGE_WIDTHS = [64, 128, 256]
 MLP_BLOCKS = 2
+# Dataset (read by load_data and at model construction). 'cifar100' (default, all §1–§21 results) or
+# 'tinyimagenet' (64x64, 200 classes; cache built by _tinyimagenet_prep.py). With GAP the backbone is
+# resolution-agnostic: the stride-2 stem gives 32x32 into the stages for Tiny-ImageNet, 16x16 for CIFAR.
+DATASET = 'cifar100'
+NUM_CLASSES = 100
+_NUM_CLASSES = {'cifar100': 100, 'cifar10': 10, 'tinyimagenet': 200}
+def set_dataset(name):
+    # select the dataset AND the matching head size (call before load_data / model construction)
+    global DATASET, NUM_CLASSES
+    DATASET, NUM_CLASSES = name, _NUM_CLASSES[name]
+# Skip connections (§23 ablation). Read at block construction (stored per block), so flipping it later
+# cannot silently change an existing model. False = plain network: no identity add, no projection shortcut
+# (the stride/width change is carried by conv1 alone), and no residual add in the MLP head.
+RESIDUAL = True
 
 
 # ---- fixed-point layer wrappers: torch-matching parameter names, compute via the Q autograd fns ----
@@ -1170,7 +1184,8 @@ class BasicBlock(nn.Module):
         self.conv2 = Conv(cout, cout, 3, 1, 1, False)
         self.bn2   = BN(cout)
         self.relu  = nn.ReLU()
-        self.has_down = (stride != 1 or cin != cout)
+        self.residual = RESIDUAL
+        self.has_down = (stride != 1 or cin != cout) and self.residual
         if self.has_down:                                        # projection shortcut on shape change
             self.down_conv = Conv(cin, cout, 1, stride, 0, False)
             self.down_bn   = BN(cout)
@@ -1179,6 +1194,8 @@ class BasicBlock(nn.Module):
         identity = x
         out = self.relu(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
+        if not self.residual:
+            return self.relu(out)                               # plain block (§23 ablation)
         if self.has_down:
             identity = self.down_bn(self.down_conv(x))
         return self.relu(out + identity)                        # residual add (ring add: exact/free)
@@ -1192,11 +1209,12 @@ class MLPBlock(nn.Module):
         self.fc1 = Lin(dim, dim)
         self.fc2 = Lin(dim, dim)
         self.relu = nn.ReLU()
+        self.residual = RESIDUAL
 
     def forward(self, x):
         out = self.relu(self.fc1(x))
         out = self.fc2(out)
-        return self.relu(out + x)                               # residual add
+        return self.relu(out + x) if self.residual else self.relu(out)   # residual add (off: §23)
 
 
 class _ResNet(nn.Module):
@@ -1234,7 +1252,7 @@ class _ResNet(nn.Module):
         self.fc_in_dim = fc_in
         self.head_fc0 = Lin(fc_in, 512)
         self.mlp = nn.ModuleList([MLPBlock(512, q) for _ in range(MLP_BLOCKS)])
-        self.head_fc_out = Lin(512, 100)
+        self.head_fc_out = Lin(512, NUM_CLASSES)
 
     def _gap(self, x):
         # Global average pool = sum / (public spatial count). Use torch's mean so the op stays
@@ -1372,7 +1390,36 @@ def augment_batch(x, pad=4):
     return xc
 
 
+def load_tinyimagenet(batch_size):
+    # Tiny-ImageNet from the uint8 cache (_tinyimagenet_prep.py), normalized with its train mean/std.
+    # Same loader semantics as the CIFAR path: one-hot targets, shuffled train (global torch RNG),
+    # unshuffled test (the labelled val split).
+    d = np.load('./data/tiny-imagenet-200.npz')
+    mean = torch.tensor([0.4802, 0.4481, 0.3975]).view(1, 3, 1, 1)
+    std = torch.tensor([0.2764, 0.2689, 0.2816]).view(1, 3, 1, 1)
+    def prep(x, y):
+        x = (torch.from_numpy(x).permute(0, 3, 1, 2).float() / 255 - mean) / std
+        return torch.utils.data.TensorDataset(x, F.one_hot(torch.from_numpy(y), NUM_CLASSES).float())
+    tr, te = prep(d['x_train'], d['y_train']), prep(d['x_val'], d['y_val'])
+    return (torch.utils.data.DataLoader(tr, batch_size=batch_size, shuffle=True),
+            torch.utils.data.DataLoader(te, batch_size=batch_size, shuffle=False))
+
+def load_cifar10(batch_size):
+    # CIFAR-10 with the same loader semantics as the CIFAR-100 path below (one-hot targets, shuffled train,
+    # 2 workers); only the dataset class, normalization constants and class count differ.
+    transform = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616))])
+    target_transform = transforms.Compose([one_hot(10)])
+    tr = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform, target_transform=target_transform)
+    te = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform, target_transform=target_transform)
+    return (torch.utils.data.DataLoader(tr, batch_size=batch_size, shuffle=True, num_workers=2),
+            torch.utils.data.DataLoader(te, batch_size=batch_size, shuffle=False, num_workers=2))
+
 def load_data(batch_size = 250):
+    if DATASET == 'tinyimagenet':
+        return load_tinyimagenet(batch_size)
+    if DATASET == 'cifar10':
+        return load_cifar10(batch_size)
 
     transform = transforms.Compose([
         transforms.ToTensor(),
