@@ -1,0 +1,167 @@
+QC SEED=1 RECIP_NEWTON=1 ISQRT_NEWTON=1 BN_EARLY_DIV_BITS=5 RING_BITS=35 DIV_PUBLIC_RING=1 LIN_GRAD_PRESHIFT=2
+QC FXOPT=1 F_W=20 F_V=16 BN_STATS_F=16
+QC BITs=8 S=2^17 A=9 [5, 5, 5] cifar10 aug lr=0.1 cosine 80 ep  (8.61M params)
+QC ep | base t1/t5 | quant t1/t5 | t1 gap | nonfin | sec | payload | batch-stat t1 (old protocol)
+QC e1   | 39.89/90.31 | 37.68/88.66 | -2.21 | 0 | 361 | 2^31.51 | 40.58
+BNDIAG e1 | running_var min 0.132 max 19.8 (stages.2.0.bn1) | var<=0: 0/4928 | |running_mean| max 8.38 | |param| max 1.29 | |BN gamma| max 1.29
+QC e2   | 52.90/93.84 | 50.48/93.53 | -2.42 | 0 | 358 | 2^30.78 | 55.05
+BNDIAG e2 | running_var min 0.105 max 10.8 (stem_bn) | var<=0: 0/4928 | |running_mean| max 8.61 | |param| max 1.68 | |BN gamma| max 1.68
+QC e3   | 57.86/95.24 | 54.95/94.77 | -2.91 | 0 | 358 | 2^30.27 | 62.63
+BNDIAG e3 | running_var min 0.0707 max 7.52 (stem_bn) | var<=0: 0/4928 | |running_mean| max 7.77 | |param| max 1.69 | |BN gamma| max 1.69
+QC e4   | 63.06/95.58 | 62.92/96.49 | -0.14 | 0 | 359 | 2^30.64 | 68.13
+BNDIAG e4 | running_var min 0.0324 max 7.62 (stem_bn) | var<=0: 0/4928 | |running_mean| max 5.83 | |param| max 1.54 | |BN gamma| max 1.54
+QC e5   | 67.46/97.78 | 68.39/97.19 | +0.93 | 0 | 360 | 2^30.46 | 71.58
+BNDIAG e5 | running_var min 0.0365 max 7.09 (stem_bn) | var<=0: 0/4928 | |running_mean| max 4.98 | |param| max 1.32 | |BN gamma| max 1.32
+QC e6   | 70.27/97.56 | 72.60/97.95 | +2.33 | 0 | 359 | 2^31.55 | 75.91
+BNDIAG e6 | running_var min 0.022 max 13.6 (stem_bn) | var<=0: 0/4928 | |running_mean| max 3.66 | |param| max 1.38 | |BN gamma| max 1.21
+QC e7   | 74.05/97.95 | 72.23/97.65 | -1.82 | 0 | 358 | 2^30.04 | 75.93
+BNDIAG e7 | running_var min 0.0088 max 5.84 (stem_bn) | var<=0: 0/4928 | |running_mean| max 3.88 | |param| max 1.43 | |BN gamma| max 1.04
+QC e8   | 73.16/97.24 | 75.38/98.20 | +2.22 | 0 | 360 | 2^29.95 | 78.09
+BNDIAG e8 | running_var min 0.00558 max 3.78 (stages.0.0.bn1) | var<=0: 0/4928 | |running_mean| max 3.16 | |param| max 1.45 | |BN gamma| max 0.988
+QC e9   | 74.24/98.39 | 76.79/98.10 | +2.55 | 0 | 358 | 2^29.75 | 79.46
+BNDIAG e9 | running_var min 0.00343 max 3.83 (stages.0.0.bn1) | var<=0: 0/4928 | |running_mean| max 2.83 | |param| max 1.5 | |BN gamma| max 0.926
+QC e10  | 74.63/98.24 | 78.37/98.57 | +3.74 | 0 | 358 | 2^29.65 | 80.11
+BNDIAG e10 | running_var min 0.00177 max 3.25 (stages.0.0.bn1) | var<=0: 0/4928 | |running_mean| max 2.69 | |param| max 1.5 | |BN gamma| max 0.852
+QC e11  | 75.85/98.49 | 74.18/98.41 | -1.67 | 0 | 358 | 2^29.67 | 80.91
+BNDIAG e11 | running_var min 0.000809 max 3.18 (stages.0.0.bn1) | var<=0: 0/4928 | |running_mean| max 2.49 | |param| max 1.54 | |BN gamma| max 0.855
+QC e12  | 75.25/98.73 | 78.14/98.37 | +2.89 | 0 | 359 | 2^29.67 | 81.22
+BNDIAG e12 | running_var min 0.000244 max 3.13 (stages.0.0.bn1) | var<=0: 0/4928 | |running_mean| max 2.81 | |param| max 1.55 | |BN gamma| max 0.859
+QC e13  | 76.03/98.58 | 74.83/98.49 | -1.20 | 0 | 361 | 2^29.62 | 82.22
+BNDIAG e13 | running_var min 0.000107 max 2.92 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.81 | |param| max 1.55 | |BN gamma| max 0.84
+QC e14  | 75.73/98.28 | 79.47/98.75 | +3.74 | 0 | 359 | 2^30.11 | 81.62
+BNDIAG e14 | running_var min 6.1e-05 max 3.07 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.43 | |param| max 1.57 | |BN gamma| max 0.812
+QC e15  | 77.54/98.85 | 73.23/96.08 | -4.31 | 0 | 359 | 2^29.66 | 81.27
+BNDIAG e15 | running_var min 3.05e-05 max 3.38 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.59 | |param| max 1.53 | |BN gamma| max 0.766
+QC e16  | 78.50/98.38 | 77.63/97.77 | -0.87 | 0 | 360 | 2^29.65 | 82.47
+BNDIAG e16 | running_var min 3.05e-05 max 2.71 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.51 | |param| max 1.57 | |BN gamma| max 0.785
+QC e17  | 73.33/97.19 | 80.05/99.03 | +6.72 | 0 | 360 | 2^30.11 | 82.42
+BNDIAG e17 | running_var min 1.53e-05 max 2.51 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.47 | |param| max 1.59 | |BN gamma| max 0.809
+QC e18  | 77.43/97.72 | 79.26/98.41 | +1.83 | 0 | 360 | 2^29.67 | 83.69
+BNDIAG e18 | running_var min 1.53e-05 max 2.5 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.72 | |param| max 1.59 | |BN gamma| max 0.887
+QC e19  | 76.72/98.28 | 76.34/97.64 | -0.38 | 0 | 359 | 2^29.66 | 82.47
+BNDIAG e19 | running_var min 1.53e-05 max 2.52 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.85 | |param| max 1.59 | |BN gamma| max 0.809
+QC e20  | 72.06/97.84 | 82.07/98.75 | +10.01 | 0 | 361 | 2^29.58 | 84.87
+BNDIAG e20 | running_var min 1.53e-05 max 2.43 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.6 | |param| max 1.57 | |BN gamma| max 0.781
+QC e21  | 80.67/98.76 | 78.64/98.72 | -2.03 | 0 | 360 | 2^29.65 | 82.85
+BNDIAG e21 | running_var min 1.53e-05 max 3.35 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.71 | |param| max 1.58 | |BN gamma| max 0.789
+QC e22  | 81.43/98.76 | 81.67/99.11 | +0.24 | 0 | 361 | 2^29.55 | 84.71
+BNDIAG e22 | running_var min 1.53e-05 max 2.36 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.53 | |param| max 1.6 | |BN gamma| max 0.809
+QC e23  | 83.44/99.10 | 81.30/98.66 | -2.14 | 0 | 361 | 2^29.60 | 85.09
+BNDIAG e23 | running_var min 1.53e-05 max 2.45 (stem_bn) | var<=0: 0/4928 | |running_mean| max 2.57 | |param| max 1.59 | |BN gamma| max 0.844
+QC e24  | 79.33/98.44 | 78.86/98.46 | -0.47 | 0 | 359 | 2^29.76 | 84.62
+BNDIAG e24 | running_var min 0 max 2.98 (stem_bn) | var<=0: 1/4928 | |running_mean| max 2.66 | |param| max 1.58 | |BN gamma| max 0.777
+QC e25  | 80.49/98.46 | 79.06/98.49 | -1.43 | 0 | 359 | 2^29.65 | 83.58
+BNDIAG e25 | running_var min 0 max 3.74 (stem_bn) | var<=0: 1/4928 | |running_mean| max 2.18 | |param| max 1.61 | |BN gamma| max 0.797
+QC e26  | 84.75/99.22 | 81.56/99.00 | -3.19 | 0 | 358 | 2^29.66 | 85.08
+BNDIAG e26 | running_var min 0 max 2.87 (stem_bn) | var<=0: 3/4928 | |running_mean| max 2.11 | |param| max 1.61 | |BN gamma| max 0.801
+QC e27  | 84.15/99.05 | 82.03/98.95 | -2.12 | 0 | 358 | 2^29.73 | 85.21
+BNDIAG e27 | running_var min 0 max 3.24 (stem_bn) | var<=0: 3/4928 | |running_mean| max 2.48 | |param| max 1.65 | |BN gamma| max 0.805
+QC e28  | 76.42/98.17 | 82.67/98.83 | +6.25 | 0 | 358 | 2^29.80 | 85.90
+BNDIAG e28 | running_var min 0 max 3.81 (stem_bn) | var<=0: 3/4928 | |running_mean| max 2.21 | |param| max 1.57 | |BN gamma| max 0.785
+QC e29  | 80.63/99.02 | 80.88/98.74 | +0.25 | 0 | 359 | 2^29.64 | 85.17
+BNDIAG e29 | running_var min 0 max 2.59 (stem_bn) | var<=0: 3/4928 | |running_mean| max 2.03 | |param| max 1.57 | |BN gamma| max 0.816
+QC e30  | 81.85/99.12 | 82.25/98.97 | +0.40 | 0 | 359 | 2^29.65 | 85.65
+BNDIAG e30 | running_var min 0 max 2.86 (stem_bn) | var<=0: 5/4928 | |running_mean| max 2.13 | |param| max 1.58 | |BN gamma| max 0.859
+QC e31  | 84.66/99.41 | 84.70/99.22 | +0.04 | 0 | 358 | 2^29.70 | 86.52
+BNDIAG e31 | running_var min 0 max 2.52 (stem_bn) | var<=0: 3/4928 | |running_mean| max 2.03 | |param| max 1.59 | |BN gamma| max 0.754
+QC e32  | 81.19/98.59 | 83.59/99.27 | +2.40 | 0 | 358 | 2^29.49 | 86.12
+BNDIAG e32 | running_var min 0 max 2.81 (stem_bn) | var<=0: 6/4928 | |running_mean| max 2.06 | |param| max 1.62 | |BN gamma| max 0.715
+QC e33  | 83.06/99.19 | 82.44/99.20 | -0.62 | 0 | 358 | 2^30.18 | 86.08
+BNDIAG e33 | running_var min 0 max 2.24 (stem_bn) | var<=0: 7/4928 | |running_mean| max 2.01 | |param| max 1.59 | |BN gamma| max 0.828
+QC e34  | 83.69/99.19 | 85.45/99.40 | +1.76 | 0 | 359 | 2^29.50 | 86.70
+BNDIAG e34 | running_var min 0 max 2.4 (stem_bn) | var<=0: 7/4928 | |running_mean| max 1.85 | |param| max 1.57 | |BN gamma| max 0.812
+QC e35  | 81.99/98.72 | 82.64/98.88 | +0.65 | 0 | 359 | 2^29.87 | 86.45
+BNDIAG e35 | running_var min 0 max 2.94 (stem_bn) | var<=0: 6/4928 | |running_mean| max 1.94 | |param| max 1.63 | |BN gamma| max 0.773
+QC e36  | 83.40/98.89 | 85.49/99.39 | +2.09 | 0 | 360 | 2^29.98 | 86.91
+BNDIAG e36 | running_var min 0 max 2.41 (stem_bn) | var<=0: 9/4928 | |running_mean| max 1.78 | |param| max 1.61 | |BN gamma| max 0.766
+QC e37  | 84.13/98.81 | 84.62/99.29 | +0.49 | 0 | 360 | 2^30.15 | 86.40
+BNDIAG e37 | running_var min 0 max 2.61 (stem_bn) | var<=0: 11/4928 | |running_mean| max 1.83 | |param| max 1.6 | |BN gamma| max 0.73
+QC e38  | 86.61/99.43 | 82.80/98.99 | -3.81 | 0 | 359 | 2^29.66 | 86.26
+BNDIAG e38 | running_var min 0 max 2.19 (stem_bn) | var<=0: 7/4928 | |running_mean| max 1.95 | |param| max 1.59 | |BN gamma| max 0.777
+QC e39  | 85.62/99.34 | 82.48/99.23 | -3.14 | 0 | 359 | 2^29.81 | 86.62
+BNDIAG e39 | running_var min 0 max 2.28 (stem_bn) | var<=0: 13/4928 | |running_mean| max 2.03 | |param| max 1.59 | |BN gamma| max 0.703
+QC e40  | 86.25/99.35 | 84.34/99.39 | -1.91 | 0 | 359 | 2^29.70 | 87.70
+BNDIAG e40 | running_var min 0 max 1.95 (stem_bn) | var<=0: 14/4928 | |running_mean| max 2.05 | |param| max 1.6 | |BN gamma| max 0.695
+QC e41  | 85.88/99.41 | 84.84/99.47 | -1.04 | 0 | 359 | 2^29.66 | 87.02
+BNDIAG e41 | running_var min 0 max 1.98 (stem_bn) | var<=0: 12/4928 | |running_mean| max 1.96 | |param| max 1.59 | |BN gamma| max 0.742
+QC e42  | 87.27/99.64 | 85.93/99.34 | -1.34 | 0 | 359 | 2^29.79 | 87.66
+BNDIAG e42 | running_var min 0 max 1.81 (stem_bn) | var<=0: 17/4928 | |running_mean| max 1.76 | |param| max 1.61 | |BN gamma| max 0.73
+QC e43  | 85.21/99.00 | 86.68/99.49 | +1.47 | 0 | 360 | 2^29.79 | 88.20
+BNDIAG e43 | running_var min 0 max 1.75 (stem_bn) | var<=0: 19/4928 | |running_mean| max 1.7 | |param| max 1.61 | |BN gamma| max 0.703
+QC e44  | 87.26/99.44 | 85.56/99.52 | -1.70 | 0 | 360 | 2^30.03 | 87.93
+BNDIAG e44 | running_var min 0 max 1.75 (stem_bn) | var<=0: 20/4928 | |running_mean| max 1.71 | |param| max 1.62 | |BN gamma| max 0.738
+QC e45  | 86.79/99.40 | 87.84/99.62 | +1.05 | 0 | 360 | 2^29.59 | 88.57
+BNDIAG e45 | running_var min 0 max 2.01 (stem_bn) | var<=0: 25/4928 | |running_mean| max 1.65 | |param| max 1.64 | |BN gamma| max 0.703
+QC e46  | 85.52/99.42 | 86.40/99.34 | +0.88 | 0 | 360 | 2^29.67 | 88.82
+BNDIAG e46 | running_var min 0 max 2.29 (stem_bn) | var<=0: 22/4928 | |running_mean| max 1.81 | |param| max 1.64 | |BN gamma| max 0.695
+QC e47  | 86.86/99.35 | 87.19/99.52 | +0.33 | 0 | 359 | 2^29.93 | 88.64
+BNDIAG e47 | running_var min 0 max 2.45 (stem_bn) | var<=0: 21/4928 | |running_mean| max 1.73 | |param| max 1.62 | |BN gamma| max 0.738
+QC e48  | 88.03/99.48 | 86.10/99.46 | -1.93 | 0 | 358 | 2^29.94 | 88.26
+BNDIAG e48 | running_var min 0 max 1.72 (stem_bn) | var<=0: 27/4928 | |running_mean| max 1.59 | |param| max 1.62 | |BN gamma| max 0.668
+QC e49  | 87.83/99.47 | 86.90/99.30 | -0.93 | 0 | 358 | 2^30.12 | 88.39
+BNDIAG e49 | running_var min 0 max 1.56 (stem_bn) | var<=0: 31/4928 | |running_mean| max 1.64 | |param| max 1.62 | |BN gamma| max 0.656
+QC e50  | 88.49/99.63 | 86.70/99.38 | -1.79 | 0 | 360 | 2^29.74 | 88.31
+BNDIAG e50 | running_var min 0 max 1.87 (stem_bn) | var<=0: 29/4928 | |running_mean| max 1.6 | |param| max 1.6 | |BN gamma| max 0.625
+QC e51  | 86.02/99.47 | 88.47/99.55 | +2.45 | 0 | 359 | 2^30.10 | 88.88
+BNDIAG e51 | running_var min 0 max 1.8 (stem_bn) | var<=0: 27/4928 | |running_mean| max 1.53 | |param| max 1.62 | |BN gamma| max 0.656
+QC e52  | 89.29/99.62 | 88.41/99.64 | -0.88 | 0 | 359 | 2^29.58 | 89.28
+BNDIAG e52 | running_var min 0 max 1.54 (stem_bn) | var<=0: 25/4928 | |running_mean| max 1.45 | |param| max 1.64 | |BN gamma| max 0.641
+QC e53  | 87.83/99.52 | 87.69/99.62 | -0.14 | 0 | 359 | 2^29.85 | 89.33
+BNDIAG e53 | running_var min 0 max 1.35 (stem_bn) | var<=0: 31/4928 | |running_mean| max 1.45 | |param| max 1.63 | |BN gamma| max 0.633
+QC e54  | 89.45/99.64 | 88.76/99.60 | -0.69 | 0 | 359 | 2^30.07 | 89.14
+BNDIAG e54 | running_var min 0 max 1.82 (stem_bn) | var<=0: 32/4928 | |running_mean| max 1.42 | |param| max 1.62 | |BN gamma| max 0.594
+QC e55  | 87.26/99.58 | 88.87/99.63 | +1.61 | 0 | 361 | 2^30.07 | 89.46
+BNDIAG e55 | running_var min 0 max 1.76 (stem_bn) | var<=0: 30/4928 | |running_mean| max 1.39 | |param| max 1.61 | |BN gamma| max 0.625
+QC e56  | 89.65/99.61 | 88.29/99.61 | -1.36 | 0 | 359 | 2^29.98 | 90.12
+BNDIAG e56 | running_var min 0 max 1.34 (stem_bn) | var<=0: 37/4928 | |running_mean| max 1.38 | |param| max 1.62 | |BN gamma| max 0.582
+QC e57  | 89.94/99.63 | 90.59/99.78 | +0.65 | 0 | 360 | 2^30.87 | 90.72
+BNDIAG e57 | running_var min 0 max 1.77 (stem_bn) | var<=0: 35/4928 | |running_mean| max 1.33 | |param| max 1.63 | |BN gamma| max 0.582
+QC e58  | 88.95/99.68 | 89.74/99.63 | +0.79 | 0 | 360 | 2^30.84 | 90.50
+BNDIAG e58 | running_var min 0 max 1.57 (stem_bn) | var<=0: 32/4928 | |running_mean| max 1.36 | |param| max 1.64 | |BN gamma| max 0.574
+QC e59  | 89.52/99.65 | 90.32/99.74 | +0.80 | 0 | 359 | 2^29.96 | 90.74
+BNDIAG e59 | running_var min 0 max 1.33 (stem_bn) | var<=0: 35/4928 | |running_mean| max 1.26 | |param| max 1.63 | |BN gamma| max 0.594
+QC e60  | 90.20/99.75 | 90.56/99.72 | +0.36 | 0 | 359 | 2^30.45 | 90.62
+BNDIAG e60 | running_var min 0 max 1.31 (stem_bn) | var<=0: 39/4928 | |running_mean| max 1.18 | |param| max 1.63 | |BN gamma| max 0.574
+QC e61  | 89.65/99.78 | 90.24/99.72 | +0.59 | 0 | 359 | 2^30.08 | 91.06
+BNDIAG e61 | running_var min 0 max 1.32 (stem_bn) | var<=0: 39/4928 | |running_mean| max 1.06 | |param| max 1.64 | |BN gamma| max 0.555
+QC e62  | 91.39/99.74 | 91.40/99.78 | +0.01 | 0 | 359 | 2^30.57 | 91.13
+BNDIAG e62 | running_var min 0 max 1.24 (stem_bn) | var<=0: 39/4928 | |running_mean| max 1.06 | |param| max 1.64 | |BN gamma| max 0.559
+QC e63  | 90.24/99.67 | 91.40/99.79 | +1.16 | 0 | 362 | 2^30.86 | 91.29
+BNDIAG e63 | running_var min 0 max 1.29 (stem_bn) | var<=0: 41/4928 | |running_mean| max 1.07 | |param| max 1.64 | |BN gamma| max 0.543
+QC e64  | 91.49/99.79 | 91.17/99.74 | -0.32 | 0 | 359 | 2^30.41 | 91.32
+BNDIAG e64 | running_var min 0 max 1.45 (stem_bn) | var<=0: 38/4928 | |running_mean| max 0.992 | |param| max 1.64 | |BN gamma| max 0.52
+QC e65  | 92.12/99.87 | 91.84/99.83 | -0.28 | 0 | 360 | 2^29.96 | 91.79
+BNDIAG e65 | running_var min 0 max 1.16 (stem_bn) | var<=0: 42/4928 | |running_mean| max 0.973 | |param| max 1.64 | |BN gamma| max 0.523
+QC e66  | 91.62/99.70 | 92.16/99.79 | +0.54 | 0 | 359 | 2^30.87 | 92.05
+BNDIAG e66 | running_var min 0 max 1.3 (stem_bn) | var<=0: 40/4928 | |running_mean| max 0.955 | |param| max 1.64 | |BN gamma| max 0.535
+QC e67  | 92.32/99.81 | 92.36/99.89 | +0.04 | 0 | 359 | 2^30.85 | 92.19
+BNDIAG e67 | running_var min 0 max 1.23 (stem_bn) | var<=0: 40/4928 | |running_mean| max 0.919 | |param| max 1.64 | |BN gamma| max 0.516
+QC e68  | 92.55/99.77 | 92.48/99.86 | -0.07 | 0 | 358 | 2^30.53 | 92.52
+BNDIAG e68 | running_var min 0 max 1.19 (stem_bn) | var<=0: 37/4928 | |running_mean| max 0.874 | |param| max 1.65 | |BN gamma| max 0.504
+QC e69  | 92.62/99.82 | 92.57/99.82 | -0.05 | 0 | 359 | 2^30.25 | 92.67
+BNDIAG e69 | running_var min 0 max 1.09 (stem_bn) | var<=0: 45/4928 | |running_mean| max 0.872 | |param| max 1.64 | |BN gamma| max 0.496
+QC e70  | 92.62/99.83 | 92.44/99.84 | -0.18 | 0 | 359 | 2^29.83 | 92.21
+BNDIAG e70 | running_var min 0 max 1.08 (stem_bn) | var<=0: 47/4928 | |running_mean| max 0.869 | |param| max 1.65 | |BN gamma| max 0.492
+QC e71  | 92.90/99.81 | 92.95/99.82 | +0.05 | 0 | 359 | 2^30.17 | 92.57
+BNDIAG e71 | running_var min 0 max 1.02 (stem_bn) | var<=0: 43/4928 | |running_mean| max 0.848 | |param| max 1.64 | |BN gamma| max 0.5
+QC e72  | 93.19/99.75 | 92.78/99.80 | -0.41 | 0 | 360 | 2^30.28 | 92.79
+BNDIAG e72 | running_var min 0 max 1.02 (stem_bn) | var<=0: 45/4928 | |running_mean| max 0.847 | |param| max 1.64 | |BN gamma| max 0.488
+QC e73  | 93.12/99.78 | 92.85/99.81 | -0.27 | 0 | 360 | 2^30.46 | 92.87
+BNDIAG e73 | running_var min 0 max 1.01 (stem_bn) | var<=0: 40/4928 | |running_mean| max 0.852 | |param| max 1.64 | |BN gamma| max 0.488
+QC e74  | 93.18/99.76 | 92.94/99.80 | -0.24 | 0 | 360 | 2^30.22 | 92.68
+BNDIAG e74 | running_var min 0 max 1 (stem_bn) | var<=0: 45/4928 | |running_mean| max 0.855 | |param| max 1.64 | |BN gamma| max 0.488
+QC e75  | 93.36/99.80 | 92.96/99.81 | -0.40 | 0 | 360 | 2^31.10 | 92.76
+BNDIAG e75 | running_var min 0 max 0.999 (stem_bn) | var<=0: 46/4928 | |running_mean| max 0.843 | |param| max 1.64 | |BN gamma| max 0.488
+QC e76  | 93.39/99.78 | 93.27/99.80 | -0.12 | 0 | 360 | 2^30.05 | 92.84
+BNDIAG e76 | running_var min 0 max 1 (stem_bn) | var<=0: 46/4928 | |running_mean| max 0.84 | |param| max 1.63 | |BN gamma| max 0.488
+QC e77  | 93.46/99.81 | 93.36/99.83 | -0.10 | 0 | 360 | 2^30.29 | 92.81
+BNDIAG e77 | running_var min 0 max 0.994 (stem_bn) | var<=0: 48/4928 | |running_mean| max 0.838 | |param| max 1.63 | |BN gamma| max 0.488
+QC e78  | 93.45/99.79 | 93.24/99.79 | -0.21 | 0 | 359 | 2^29.46 | 92.96
+BNDIAG e78 | running_var min 0 max 0.998 (stem_bn) | var<=0: 42/4928 | |running_mean| max 0.837 | |param| max 1.63 | |BN gamma| max 0.488
+QC e79  | 93.47/99.80 | 93.20/99.82 | -0.27 | 0 | 360 | 2^30.17 | 92.87
+BNDIAG e79 | running_var min 0 max 0.993 (stem_bn) | var<=0: 45/4928 | |running_mean| max 0.837 | |param| max 1.63 | |BN gamma| max 0.484
+QC e80  | 93.48/99.78 | 93.25/99.80 | -0.23 | 0 | 359 | 2^30.02 | 92.83
+BNDIAG e80 | running_var min 0 max 0.994 (stem_bn) | var<=0: 37/4928 | |running_mean| max 0.838 | |param| max 1.63 | |BN gamma| max 0.484
+QC STOP after e80 (QC_EPOCHS)
+QC summary BITs=8: final quant t1 93.25 (base best 93.48) paramRMSE 131.0%
+QC DONE

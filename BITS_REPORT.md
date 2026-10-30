@@ -18,11 +18,13 @@ small gradients stay above the fixed-point grid. It costs no secure operations.
 |---|---|---|---|
 | CIFAR-100, ResNet [5,5,5], **S=2^17** | 71.79 ± 0.16 | **71.57 ± 0.27** | **−0.22 ± 0.14** |
 | CIFAR-100, S=2^16 | 71.79 ± 0.16 | 70.95 ± 0.03 | −0.84 ± 0.13 |
+| CIFAR-10, S=2^17 | 93.45 ± 0.16 | 93.21 ± 0.07 | −0.24 ± 0.22 |
 | CIFAR-10, S=2^16 | 93.45 ± 0.16 | 93.20 ± 0.06 | −0.25 ± 0.19 |
 | Tiny-ImageNet (64×64), S=2^16 | 58.11 ± 0.07 | **collapses** | — (§7.1) |
 
 Mean ± sd over 3 seeds; every fixed-point run is paired with a float run of the same seed. **Zero ring
-wraparounds** in every CIFAR run at ℓ=35. CIFAR-10 at S=2^17 is running.
+wraparounds** in every CIFAR run at ℓ=35. On CIFAR-10 the gap is already small at 2^16, so 2^17 changes
+nothing there.
 
 - **Communication:** one real 3-party training step sends **1.61× less data** at ℓ=35 than the usual
   ℓ=64 (MP-SPDZ, semi-honest replicated ring). Rounds are unchanged.
@@ -214,6 +216,5 @@ These should be disclosed in a methods section.
 
 ## 11. Open items
 
-1. CIFAR-10 at S=2^17 (running).
-2. A BatchNorm-backward fix for high resolution. K and 1/σ precision are ruled out; next, test higher precision for x_norm and the gradient inside BN backward (a code change), then a short training test.
-3. Optional: a second architecture family; a malicious-security cost measurement.
+1. A BatchNorm-backward fix for high resolution. K and 1/σ precision are ruled out; next, test higher precision for x_norm and the gradient inside BN backward (a code change), then a short training test.
+2. Optional: a second architecture family; a malicious-security cost measurement.
