@@ -1,0 +1,2 @@
+A cifar100     after 3 float epochs | BN-input grad, median grid steps (fraction < 1 step): stem 178.2 (0.004) | stage0 55.3 (0.018) | stage1 88.5 (0.010) | stage2 193.0 (0.006)
+A tinyimagenet after 3 float epochs | BN-input grad, median grid steps (fraction < 1 step): stem 117.6 (0.007) | stage0 40.4 (0.029) | stage1 59.2 (0.015) | stage2 95.2 (0.011)

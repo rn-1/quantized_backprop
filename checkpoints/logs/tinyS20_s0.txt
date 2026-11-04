@@ -1,0 +1,5 @@
+QC SEED=0 RECIP_NEWTON=1 ISQRT_NEWTON=1 BN_EARLY_DIV_BITS=5 RING_BITS=35 DIV_PUBLIC_RING=1 LIN_GRAD_PRESHIFT=2
+QC FXOPT=1 F_W=20 F_V=16 BN_STATS_F=16
+QC BITs=8 S=2^20 A=9 [5, 5, 5] tinyimagenet aug lr=0.1 cosine 40 ep  (8.71M params)
+QC ep | base t1/t5 | quant t1/t5 | t1 gap | nonfin | sec | payload | batch-stat t1 (old protocol)
+KILLED by request 2026-11-02 (GPU needed by another user); no epochs completed

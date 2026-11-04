@@ -57,7 +57,7 @@ if SITE_THR is not None:
 LR, MOM, WD, EPOCHS, N_BATCH = 0.1, 0.9, 5e-4, 80, 128
 import os as _os2
 EPOCHS = int(_os2.environ.get('EPOCHS', EPOCHS))   # cosine schedule length (default 80; Tiny-ImageNet runs use 40)
-dev = torch.device('cuda')
+dev = torch.device(os.environ.get('QC_DEV', 'cuda'))   # QC_DEV=cpu only for smoke tests
 simulate.STAGE_BLOCKS = [5,5,5]; simulate.GLOBAL_AVG_POOL = True
 # DATASET=tinyimagenet: 200 classes, 64x64. Its cache stays on the CPU (float64 on-GPU would be ~9.8 GB per
 # run) and each batch is moved over in the loop; for CIFAR the .to(dev) calls below are no-ops.
@@ -78,6 +78,8 @@ torch.manual_seed(SEED)
 tl, te = load_data(N_BATCH)
 train = [(x.to(cache).to(torch.float64 if cache == dev else torch.float32), y.to(dev).argmax(1)) for x,y in tl]
 test  = [(x.to(cache), y.argmax(1).to(dev)) for x,y in te]
+if os.environ.get('QC_SMOKE'):   # smoke tests only: keep the first n train and test batches
+    train, test = train[:int(os.environ['QC_SMOKE'])], test[:int(os.environ['QC_SMOKE'])]
 
 def evaluate(m, batch_stats=False):
     # §21.6: eval mode = BN normalises with the running stats (same protocol as the float baseline).
@@ -112,7 +114,33 @@ log('QC BITs=%d S=2^%d A=%d %s%s %s aug lr=%g cosine %d ep  (%.2fM params)'
     % (BITS, int(math.log2(S)), A, BLOCKS, '' if simulate.RESIDUAL else ' PLAIN(no skips)', DATASET, LR, EPOCHS, sum(p.numel() for p in mq.parameters())/1e6))
 log('QC ep | base t1/t5 | quant t1/t5 | t1 gap | nonfin | sec | payload | batch-stat t1 (old protocol)')
 Sf = float(S)
-for ep in range(1, EPOCHS+1):
+# QC_CKPT=<path>: after every epoch, atomically save everything needed to continue: model (incl. BN buffers),
+# optimizer state (FixedSGD master weights + momentum, or torch SGD + scheduler) and the CPU/CUDA RNG states.
+# QC_RESUME=1 restarts from it. The data order and init are rebuilt from the seed exactly as in a fresh run, then
+# overwritten, so a resumed run continues bit-identically (verified, see BITS_NOTEBOOK / REPRODUCE).
+CKPT = os.environ.get('QC_CKPT'); start_ep = 1
+CFG = dict(BITS=BITS, LOGS=LOGS, A=A, SEED=SEED, DATASET=DATASET, BLOCKS=BLOCKS, RESIDUAL=simulate.RESIDUAL, EPOCHS=EPOCHS,
+           FXOPT=FXOPT, RING=simulate.RING_BITS, K=simulate.BN_EARLY_DIV_BITS, BNF=simulate.BN_STATS_F)
+if os.environ.get('QC_RESUME') and CKPT and os.path.exists(CKPT):
+    ck = torch.load(CKPT, weights_only=False)
+    assert ck['cfg'] == CFG, 'resume config mismatch: %s vs %s' % (ck['cfg'], CFG)
+    mq.load_state_dict(ck['state'])
+    if FXOPT:
+        for w, v, w0, v0 in zip(oq.W, oq.V, ck['W'], ck['V']): w.copy_(w0.to(w.device)); v.copy_(v0.to(v.device))
+        # no oq._publish(): the compute copy is restored exactly by load_state_dict, and re-publishing would draw RNG
+    else:
+        oq.load_state_dict(ck['opt']); sq.load_state_dict(ck['sched'])
+    torch.set_rng_state(ck['rng_cpu'])
+    if torch.cuda.is_available() and ck['rng_cuda'] is not None: torch.cuda.set_rng_state_all(ck['rng_cuda'])
+    start_ep = ck['epoch'] + 1
+    log('QC RESUME from %s after e%d' % (CKPT, ck['epoch']))
+def save_ckpt(ep):
+    ck = dict(cfg=CFG, epoch=ep, state=mq.state_dict(), rng_cpu=torch.get_rng_state(),
+              rng_cuda=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None)
+    if FXOPT: ck.update(W=[w.cpu() for w in oq.W], V=[v.cpu() for v in oq.V])
+    else: ck.update(opt=oq.state_dict(), sched=sq.state_dict())
+    torch.save(ck, CKPT + '.tmp'); os.replace(CKPT + '.tmp', CKPT)   # atomic: a kill mid-save keeps the old one
+for ep in range(start_ep, EPOCHS+1):
     t0=time.time(); mq.train(); nonfin=0
     if FXOPT: oq.lr = lr_at(ep)
     for bi,(x,tgt) in enumerate(train):
@@ -141,6 +169,7 @@ for ep in range(1, EPOCHS+1):
                 % (ep, rv.min().item(), rv.max().item(), worst[0], (rv <= 0).sum().item(), rv.numel(), rm.abs().max().item(), wmax, gmax))
     if os.environ.get('QC_SAVE_EVERY') and os.environ.get('QC_SAVE'):
         torch.save({'state': mq.state_dict(), 'seed': SEED, 'epoch': ep}, os.environ['QC_SAVE'] + '.e%d' % ep)
+    if CKPT: save_ckpt(ep)
     if ep >= int(os.environ.get('QC_EPOCHS', EPOCHS)): log('QC STOP after e%d (QC_EPOCHS)' % ep); break
 # final param RMSE vs baseline
 tot=totref=0.0

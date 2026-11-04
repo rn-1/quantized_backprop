@@ -1,0 +1,21 @@
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e5  S=2^16 peak 2^28.48 | stem: |w| 9.38, 65.2 (0.014), cos 0.999, rad 0.000 | stage0: |w| 4.55, 24.6 (0.054), cos 0.713, rad 0.049 | stage1: |w| 5.01, 102.5 (0.009), cos 0.933, rad 0.012 | stage2: |w| 6.35, 189.9 (0.009), cos 0.992, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e5  S=2^17 peak 2^29.48 | stem: |w| 9.38, 130.3 (0.007), cos 0.999, rad 0.000 | stage0: |w| 4.55, 49.2 (0.028), cos 0.724, rad 0.034 | stage1: |w| 5.01, 204.9 (0.005), cos 0.974, rad 0.009 | stage2: |w| 6.35, 379.9 (0.004), cos 0.995, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e5  S=2^18 peak 2^30.47 | stem: |w| 9.38, 260.7 (0.003), cos 0.999, rad 0.000 | stage0: |w| 4.55, 98.3 (0.014), cos 0.765, rad 0.014 | stage1: |w| 5.01, 409.8 (0.002), cos 0.989, rad 0.005 | stage2: |w| 6.35, 759.7 (0.002), cos 0.996, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e5  S=2^19 peak 2^31.48 | stem: |w| 9.38, 521.4 (0.002), cos 0.999, rad 0.000 | stage0: |w| 4.55, 196.6 (0.007), cos 0.817, rad 0.034 | stage1: |w| 5.01, 819.7 (0.001), cos 0.995, rad 0.003 | stage2: |w| 6.35, 1519.5 (0.001), cos 0.997, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e5  S=2^20 peak 2^32.48 | stem: |w| 9.38, 1042.8 (0.001), cos 0.999, rad 0.000 | stage0: |w| 4.55, 393.2 (0.004), cos 0.877, rad 0.018 | stage1: |w| 5.01, 1639.3 (0.001), cos 0.996, rad 0.001 | stage2: |w| 6.35, 3038.9 (0.001), cos 0.997, rad 0.000
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e9  S=2^16 peak 2^28.05 | stem: |w| 9.69, 62.4 (0.017), cos 0.995, rad 0.000 | stage0: |w| 6.31, 26.6 (0.068), cos 0.612, rad 0.092 | stage1: |w| 6.79, 145.5 (0.007), cos 0.891, rad 0.012 | stage2: |w| 8.66, 280.1 (0.006), cos 0.989, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e9  S=2^17 peak 2^28.72 | stem: |w| 9.69, 124.9 (0.008), cos 0.994, rad 0.000 | stage0: |w| 6.31, 53.2 (0.036), cos 0.714, rad 0.059 | stage1: |w| 6.79, 291.0 (0.003), cos 0.939, rad 0.007 | stage2: |w| 8.66, 560.2 (0.003), cos 0.991, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e9  S=2^18 peak 2^29.73 | stem: |w| 9.69, 249.7 (0.004), cos 0.995, rad 0.000 | stage0: |w| 6.31, 106.5 (0.019), cos 0.759, rad 0.050 | stage1: |w| 6.79, 582.1 (0.002), cos 0.970, rad 0.008 | stage2: |w| 8.66, 1120.4 (0.002), cos 0.991, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e9  S=2^19 peak 2^30.72 | stem: |w| 9.69, 499.5 (0.002), cos 0.995, rad 0.000 | stage0: |w| 6.31, 212.9 (0.010), cos 0.857, rad 0.040 | stage1: |w| 6.79, 1164.2 (0.001), cos 0.982, rad 0.003 | stage2: |w| 8.66, 2240.9 (0.001), cos 0.991, rad 0.001
+B ep | stage: weight-norm, BN-grad median steps (frac<1), grad cos vs float64, |cos(w,g)|
+B e9  S=2^20 peak 2^31.72 | stem: |w| 9.69, 998.9 (0.001), cos 0.995, rad 0.000 | stage0: |w| 6.31, 425.9 (0.005), cos 0.879, rad 0.046 | stage1: |w| 6.79, 2328.4 (0.000), cos 0.987, rad 0.002 | stage2: |w| 8.66, 4481.8 (0.001), cos 0.991, rad 0.001
+DONE

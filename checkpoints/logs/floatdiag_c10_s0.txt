@@ -1,0 +1,102 @@
+BS baseline [5, 5, 5] cifar10 8.61M  aug lr=0.1 cosine 80 ep
+BSDIAG e1 | t1 44.68 | running_var min 0.109 max 29.4 (stages.0.4.bn1) | |running_mean| max 5.67 | |param| max 1.15 | |BN gamma| max 1.15 | conv |w| stem 6.15 stage0 4.96 stage1 5.87 stage2 7.94
+BS e1   | t1 44.68 / t5 91.91 | 14s
+BSDIAG e2 | t1 51.35 | running_var min 0.0938 max 29.6 (stem_bn) | |running_mean| max 4.62 | |param| max 1.45 | |BN gamma| max 1.45 | conv |w| stem 7.95 stage0 5.12 stage1 5.41 stage2 6.80
+BSDIAG e3 | t1 54.02 | running_var min 0.0834 max 18.4 (stem_bn) | |running_mean| max 4.19 | |param| max 1.69 | |BN gamma| max 1.69 | conv |w| stem 8.57 stage0 5.18 stage1 5.08 stage2 5.91
+BSDIAG e4 | t1 62.89 | running_var min 0.0757 max 63.1 (stem_bn) | |running_mean| max 3.89 | |param| max 1.71 | |BN gamma| max 1.71 | conv |w| stem 9.39 stage0 5.34 stage1 4.99 stage2 5.30
+BSDIAG e5 | t1 56.71 | running_var min 0.0192 max 42.1 (stem_bn) | |running_mean| max 3.73 | |param| max 1.47 | |BN gamma| max 1.4 | conv |w| stem 9.67 stage0 5.72 stage1 5.18 stage2 4.92
+BS e5   | t1 56.71 / t5 94.84 | 10s
+BSDIAG e6 | t1 67.58 | running_var min 0.026 max 28.2 (stem_bn) | |running_mean| max 3.65 | |param| max 1.45 | |BN gamma| max 1.43 | conv |w| stem 9.55 stage0 5.68 stage1 5.28 stage2 4.64
+BSDIAG e7 | t1 74.52 | running_var min 0.00475 max 18.8 (stem_bn) | |running_mean| max 3.08 | |param| max 1.51 | |BN gamma| max 1.27 | conv |w| stem 9.14 stage0 5.61 stage1 5.27 stage2 4.40
+BSDIAG e8 | t1 76.79 | running_var min 0.00332 max 12.7 (stem_bn) | |running_mean| max 3 | |param| max 1.55 | |BN gamma| max 1.14 | conv |w| stem 8.73 stage0 5.58 stage1 5.30 stage2 4.22
+BSDIAG e9 | t1 71.73 | running_var min 0.00159 max 8.38 (stem_bn) | |running_mean| max 3.34 | |param| max 1.54 | |BN gamma| max 1.09 | conv |w| stem 8.48 stage0 5.57 stage1 5.34 stage2 4.09
+BSDIAG e10 | t1 76.57 | running_var min 0.000519 max 5.7 (stem_bn) | |running_mean| max 3.35 | |param| max 1.59 | |BN gamma| max 1.06 | conv |w| stem 8.41 stage0 5.63 stage1 5.46 stage2 4.02
+BS e10  | t1 76.57 / t5 98.60 | 10s
+BSDIAG e11 | t1 73.45 | running_var min 0.000371 max 4.66 (stem_bn) | |running_mean| max 3.28 | |param| max 1.58 | |BN gamma| max 1.01 | conv |w| stem 8.35 stage0 5.70 stage1 5.60 stage2 3.99
+BSDIAG e12 | t1 76.22 | running_var min 0.00024 max 4.77 (stem_bn) | |running_mean| max 3.15 | |param| max 1.63 | |BN gamma| max 0.981 | conv |w| stem 8.31 stage0 5.75 stage1 5.74 stage2 3.97
+BSDIAG e13 | t1 77.67 | running_var min 0.000156 max 4.51 (stem_bn) | |running_mean| max 3.29 | |param| max 1.56 | |BN gamma| max 0.95 | conv |w| stem 8.34 stage0 5.81 stage1 5.89 stage2 3.96
+BSDIAG e14 | t1 78.84 | running_var min 0.000115 max 4.53 (stages.0.0.bn1) | |running_mean| max 3.3 | |param| max 1.6 | |BN gamma| max 0.986 | conv |w| stem 8.32 stage0 5.87 stage1 6.02 stage2 3.97
+BSDIAG e15 | t1 75.34 | running_var min 6.78e-05 max 4.29 (stem_bn) | |running_mean| max 3.2 | |param| max 1.63 | |BN gamma| max 1.04 | conv |w| stem 8.26 stage0 5.90 stage1 6.12 stage2 3.95
+BS e15  | t1 75.34 / t5 98.87 | 10s
+BSDIAG e16 | t1 80.36 | running_var min 4.72e-05 max 4.22 (stages.0.0.bn1) | |running_mean| max 3.41 | |param| max 1.65 | |BN gamma| max 0.998 | conv |w| stem 8.21 stage0 5.93 stage1 6.24 stage2 3.97
+BSDIAG e17 | t1 80.92 | running_var min 3.6e-05 max 4.37 (stages.0.0.bn1) | |running_mean| max 3.21 | |param| max 1.69 | |BN gamma| max 0.982 | conv |w| stem 8.28 stage0 5.99 stage1 6.35 stage2 3.98
+BSDIAG e18 | t1 79.41 | running_var min 2.47e-05 max 4.39 (stem_bn) | |running_mean| max 3.56 | |param| max 1.65 | |BN gamma| max 0.968 | conv |w| stem 8.31 stage0 6.05 stage1 6.45 stage2 3.97
+BSDIAG e19 | t1 79.49 | running_var min 1.46e-05 max 4.5 (stages.0.0.bn1) | |running_mean| max 3.26 | |param| max 1.66 | |BN gamma| max 1.09 | conv |w| stem 8.33 stage0 6.08 stage1 6.54 stage2 3.99
+BSDIAG e20 | t1 77.55 | running_var min 1.16e-05 max 4.09 (stages.0.0.bn1) | |running_mean| max 2.99 | |param| max 1.63 | |BN gamma| max 0.974 | conv |w| stem 8.33 stage0 6.10 stage1 6.61 stage2 3.98
+BS e20  | t1 77.55 / t5 98.66 | 10s
+BSDIAG e21 | t1 82.41 | running_var min 1.06e-05 max 3.97 (stem_bn) | |running_mean| max 3 | |param| max 1.61 | |BN gamma| max 0.942 | conv |w| stem 8.26 stage0 6.11 stage1 6.67 stage2 3.98
+BSDIAG e22 | t1 81.48 | running_var min 1.08e-05 max 4.37 (stem_bn) | |running_mean| max 2.97 | |param| max 1.61 | |BN gamma| max 0.949 | conv |w| stem 8.23 stage0 6.10 stage1 6.74 stage2 4.00
+BSDIAG e23 | t1 82.73 | running_var min 6.81e-06 max 4.33 (stem_bn) | |running_mean| max 2.72 | |param| max 1.7 | |BN gamma| max 0.966 | conv |w| stem 8.25 stage0 6.15 stage1 6.79 stage2 4.00
+BSDIAG e24 | t1 81.12 | running_var min 5.37e-06 max 4 (stem_bn) | |running_mean| max 2.8 | |param| max 1.59 | |BN gamma| max 1.08 | conv |w| stem 8.18 stage0 6.16 stage1 6.82 stage2 4.00
+BSDIAG e25 | t1 80.13 | running_var min 3.57e-06 max 3.95 (stem_bn) | |running_mean| max 2.56 | |param| max 1.66 | |BN gamma| max 0.952 | conv |w| stem 8.23 stage0 6.16 stage1 6.87 stage2 3.99
+BS e25  | t1 80.13 / t5 98.54 | 10s
+BSDIAG e26 | t1 83.23 | running_var min 3.51e-06 max 4.2 (stem_bn) | |running_mean| max 2.3 | |param| max 1.63 | |BN gamma| max 0.869 | conv |w| stem 8.18 stage0 6.15 stage1 6.89 stage2 3.98
+BSDIAG e27 | t1 80.62 | running_var min 1.82e-06 max 3.8 (stem_bn) | |running_mean| max 2.59 | |param| max 1.64 | |BN gamma| max 0.852 | conv |w| stem 8.12 stage0 6.15 stage1 6.92 stage2 3.97
+BSDIAG e28 | t1 83.17 | running_var min 2.17e-06 max 3.8 (stem_bn) | |running_mean| max 2.49 | |param| max 1.62 | |BN gamma| max 0.831 | conv |w| stem 8.11 stage0 6.16 stage1 6.96 stage2 3.97
+BSDIAG e29 | t1 82.66 | running_var min 1.47e-06 max 3.94 (stem_bn) | |running_mean| max 2.86 | |param| max 1.62 | |BN gamma| max 0.837 | conv |w| stem 8.18 stage0 6.16 stage1 6.99 stage2 3.96
+BSDIAG e30 | t1 77.30 | running_var min 1.05e-06 max 4.02 (stem_bn) | |running_mean| max 2.57 | |param| max 1.63 | |BN gamma| max 0.87 | conv |w| stem 8.11 stage0 6.14 stage1 7.00 stage2 3.95
+BS e30  | t1 77.30 / t5 97.99 | 10s
+BSDIAG e31 | t1 83.10 | running_var min 1.15e-06 max 3.69 (stem_bn) | |running_mean| max 2.39 | |param| max 1.62 | |BN gamma| max 0.847 | conv |w| stem 8.04 stage0 6.13 stage1 7.04 stage2 3.94
+BSDIAG e32 | t1 83.34 | running_var min 7.61e-07 max 3.26 (stem_bn) | |running_mean| max 2.52 | |param| max 1.64 | |BN gamma| max 0.881 | conv |w| stem 7.99 stage0 6.11 stage1 7.05 stage2 3.93
+BSDIAG e33 | t1 81.68 | running_var min 5.04e-07 max 3.28 (stem_bn) | |running_mean| max 2.31 | |param| max 1.65 | |BN gamma| max 0.859 | conv |w| stem 7.96 stage0 6.10 stage1 7.06 stage2 3.91
+BSDIAG e34 | t1 85.76 | running_var min 3.49e-07 max 3.43 (stem_bn) | |running_mean| max 2.35 | |param| max 1.67 | |BN gamma| max 0.896 | conv |w| stem 7.96 stage0 6.10 stage1 7.09 stage2 3.92
+BSDIAG e35 | t1 84.96 | running_var min 3.18e-07 max 3.45 (stem_bn) | |running_mean| max 2.55 | |param| max 1.65 | |BN gamma| max 0.886 | conv |w| stem 7.86 stage0 6.08 stage1 7.09 stage2 3.90
+BS e35  | t1 84.96 / t5 99.27 | 10s
+BSDIAG e36 | t1 83.37 | running_var min 2.27e-07 max 3.34 (stem_bn) | |running_mean| max 2.19 | |param| max 1.7 | |BN gamma| max 0.712 | conv |w| stem 7.77 stage0 6.03 stage1 7.08 stage2 3.88
+BSDIAG e37 | t1 82.94 | running_var min 1.73e-07 max 3.28 (stem_bn) | |running_mean| max 2.09 | |param| max 1.67 | |BN gamma| max 0.831 | conv |w| stem 7.71 stage0 6.04 stage1 7.10 stage2 3.87
+BSDIAG e38 | t1 85.18 | running_var min 1.37e-07 max 2.99 (stem_bn) | |running_mean| max 2.07 | |param| max 1.64 | |BN gamma| max 0.75 | conv |w| stem 7.65 stage0 6.00 stage1 7.09 stage2 3.85
+BSDIAG e39 | t1 84.30 | running_var min 9.64e-08 max 2.86 (stem_bn) | |running_mean| max 1.97 | |param| max 1.65 | |BN gamma| max 0.76 | conv |w| stem 7.63 stage0 5.97 stage1 7.08 stage2 3.84
+BSDIAG e40 | t1 85.58 | running_var min 8.06e-08 max 2.67 (stem_bn) | |running_mean| max 2.08 | |param| max 1.63 | |BN gamma| max 0.837 | conv |w| stem 7.52 stage0 5.94 stage1 7.08 stage2 3.82
+BS e40  | t1 85.58 / t5 99.31 | 10s
+BSDIAG e41 | t1 86.04 | running_var min 6.05e-08 max 2.63 (stem_bn) | |running_mean| max 1.97 | |param| max 1.65 | |BN gamma| max 0.755 | conv |w| stem 7.51 stage0 5.93 stage1 7.07 stage2 3.81
+BSDIAG e42 | t1 85.85 | running_var min 5.05e-08 max 2.82 (stem_bn) | |running_mean| max 2.04 | |param| max 1.66 | |BN gamma| max 0.725 | conv |w| stem 7.47 stage0 5.89 stage1 7.05 stage2 3.80
+BSDIAG e43 | t1 86.18 | running_var min 4.09e-08 max 2.78 (stem_bn) | |running_mean| max 1.92 | |param| max 1.66 | |BN gamma| max 0.711 | conv |w| stem 7.40 stage0 5.84 stage1 7.03 stage2 3.77
+BSDIAG e44 | t1 86.49 | running_var min 3e-08 max 2.75 (stem_bn) | |running_mean| max 2.16 | |param| max 1.65 | |BN gamma| max 0.727 | conv |w| stem 7.34 stage0 5.81 stage1 7.01 stage2 3.75
+BSDIAG e45 | t1 86.14 | running_var min 2.6e-08 max 2.7 (stem_bn) | |running_mean| max 2.14 | |param| max 1.65 | |BN gamma| max 0.674 | conv |w| stem 7.25 stage0 5.76 stage1 6.98 stage2 3.72
+BS e45  | t1 86.14 / t5 99.37 | 10s
+BSDIAG e46 | t1 85.66 | running_var min 1.92e-08 max 2.57 (stem_bn) | |running_mean| max 2.03 | |param| max 1.65 | |BN gamma| max 0.739 | conv |w| stem 7.19 stage0 5.73 stage1 6.96 stage2 3.71
+BSDIAG e47 | t1 86.11 | running_var min 1.72e-08 max 2.72 (stem_bn) | |running_mean| max 2.03 | |param| max 1.63 | |BN gamma| max 0.686 | conv |w| stem 7.11 stage0 5.68 stage1 6.93 stage2 3.68
+BSDIAG e48 | t1 85.45 | running_var min 1.51e-08 max 2.73 (stem_bn) | |running_mean| max 1.76 | |param| max 1.61 | |BN gamma| max 0.742 | conv |w| stem 7.05 stage0 5.66 stage1 6.92 stage2 3.67
+BSDIAG e49 | t1 87.24 | running_var min 1.26e-08 max 2.55 (stem_bn) | |running_mean| max 1.75 | |param| max 1.63 | |BN gamma| max 0.651 | conv |w| stem 6.96 stage0 5.63 stage1 6.89 stage2 3.64
+BSDIAG e50 | t1 88.03 | running_var min 1.15e-08 max 2.52 (stem_bn) | |running_mean| max 1.87 | |param| max 1.62 | |BN gamma| max 0.656 | conv |w| stem 6.91 stage0 5.59 stage1 6.87 stage2 3.62
+BS e50  | t1 88.03 / t5 99.51 | 10s
+BSDIAG e51 | t1 87.06 | running_var min 9.84e-09 max 2.45 (stem_bn) | |running_mean| max 1.7 | |param| max 1.61 | |BN gamma| max 0.641 | conv |w| stem 6.83 stage0 5.54 stage1 6.82 stage2 3.59
+BSDIAG e52 | t1 86.66 | running_var min 8.85e-09 max 2.41 (stem_bn) | |running_mean| max 1.7 | |param| max 1.6 | |BN gamma| max 0.701 | conv |w| stem 6.76 stage0 5.50 stage1 6.79 stage2 3.57
+BSDIAG e53 | t1 88.72 | running_var min 8.64e-09 max 2.51 (stem_bn) | |running_mean| max 1.74 | |param| max 1.61 | |BN gamma| max 0.644 | conv |w| stem 6.68 stage0 5.45 stage1 6.76 stage2 3.54
+BSDIAG e54 | t1 88.96 | running_var min 7.43e-09 max 2.24 (stem_bn) | |running_mean| max 1.69 | |param| max 1.61 | |BN gamma| max 0.681 | conv |w| stem 6.61 stage0 5.40 stage1 6.72 stage2 3.51
+BSDIAG e55 | t1 89.31 | running_var min 5.57e-09 max 2.19 (stem_bn) | |running_mean| max 1.67 | |param| max 1.59 | |BN gamma| max 0.682 | conv |w| stem 6.52 stage0 5.34 stage1 6.67 stage2 3.48
+BS e55  | t1 89.31 / t5 99.54 | 10s
+BSDIAG e56 | t1 88.20 | running_var min 5.77e-09 max 2.08 (stem_bn) | |running_mean| max 1.72 | |param| max 1.6 | |BN gamma| max 0.618 | conv |w| stem 6.43 stage0 5.28 stage1 6.62 stage2 3.45
+BSDIAG e57 | t1 89.42 | running_var min 5.48e-09 max 2.05 (stem_bn) | |running_mean| max 1.66 | |param| max 1.58 | |BN gamma| max 0.642 | conv |w| stem 6.36 stage0 5.23 stage1 6.57 stage2 3.42
+BSDIAG e58 | t1 88.91 | running_var min 5.39e-09 max 1.97 (stem_bn) | |running_mean| max 1.48 | |param| max 1.57 | |BN gamma| max 0.615 | conv |w| stem 6.29 stage0 5.18 stage1 6.53 stage2 3.39
+BSDIAG e59 | t1 89.67 | running_var min 4.47e-09 max 1.87 (stem_bn) | |running_mean| max 1.42 | |param| max 1.58 | |BN gamma| max 0.652 | conv |w| stem 6.20 stage0 5.12 stage1 6.46 stage2 3.35
+BSDIAG e60 | t1 90.10 | running_var min 4.21e-09 max 1.85 (stem_bn) | |running_mean| max 1.41 | |param| max 1.58 | |BN gamma| max 0.611 | conv |w| stem 6.12 stage0 5.06 stage1 6.41 stage2 3.32
+BS e60  | t1 90.10 / t5 99.66 | 10s
+BSDIAG e61 | t1 89.95 | running_var min 3.88e-09 max 1.76 (stem_bn) | |running_mean| max 1.42 | |param| max 1.57 | |BN gamma| max 0.601 | conv |w| stem 6.04 stage0 5.00 stage1 6.35 stage2 3.29
+BSDIAG e62 | t1 90.47 | running_var min 3.9e-09 max 1.69 (stem_bn) | |running_mean| max 1.36 | |param| max 1.57 | |BN gamma| max 0.609 | conv |w| stem 5.96 stage0 4.95 stage1 6.29 stage2 3.25
+BSDIAG e63 | t1 90.90 | running_var min 3.78e-09 max 1.69 (stem_bn) | |running_mean| max 1.26 | |param| max 1.56 | |BN gamma| max 0.581 | conv |w| stem 5.88 stage0 4.89 stage1 6.23 stage2 3.22
+BSDIAG e64 | t1 91.20 | running_var min 3.87e-09 max 1.6 (stem_bn) | |running_mean| max 1.33 | |param| max 1.55 | |BN gamma| max 0.58 | conv |w| stem 5.81 stage0 4.83 stage1 6.17 stage2 3.18
+BSDIAG e65 | t1 90.93 | running_var min 3.53e-09 max 1.58 (stem_bn) | |running_mean| max 1.23 | |param| max 1.55 | |BN gamma| max 0.552 | conv |w| stem 5.74 stage0 4.78 stage1 6.10 stage2 3.15
+BS e65  | t1 90.93 / t5 99.74 | 10s
+BSDIAG e66 | t1 91.31 | running_var min 3.56e-09 max 1.55 (stem_bn) | |running_mean| max 1.21 | |param| max 1.54 | |BN gamma| max 0.551 | conv |w| stem 5.68 stage0 4.73 stage1 6.04 stage2 3.12
+BSDIAG e67 | t1 92.08 | running_var min 3.56e-09 max 1.57 (stem_bn) | |running_mean| max 1.19 | |param| max 1.54 | |BN gamma| max 0.547 | conv |w| stem 5.62 stage0 4.68 stage1 5.99 stage2 3.09
+BSDIAG e68 | t1 92.26 | running_var min 3.43e-09 max 1.55 (stem_bn) | |running_mean| max 1.18 | |param| max 1.53 | |BN gamma| max 0.537 | conv |w| stem 5.56 stage0 4.63 stage1 5.93 stage2 3.06
+BSDIAG e69 | t1 92.42 | running_var min 3.43e-09 max 1.51 (stem_bn) | |running_mean| max 1.14 | |param| max 1.53 | |BN gamma| max 0.531 | conv |w| stem 5.51 stage0 4.59 stage1 5.88 stage2 3.04
+BSDIAG e70 | t1 92.57 | running_var min 3.33e-09 max 1.49 (stem_bn) | |running_mean| max 1.13 | |param| max 1.52 | |BN gamma| max 0.516 | conv |w| stem 5.47 stage0 4.56 stage1 5.84 stage2 3.02
+BS e70  | t1 92.57 / t5 99.84 | 10s
+BSDIAG e71 | t1 93.02 | running_var min 3.19e-09 max 1.49 (stem_bn) | |running_mean| max 1.12 | |param| max 1.52 | |BN gamma| max 0.516 | conv |w| stem 5.43 stage0 4.53 stage1 5.80 stage2 3.00
+BSDIAG e72 | t1 93.02 | running_var min 3.09e-09 max 1.47 (stem_bn) | |running_mean| max 1.1 | |param| max 1.51 | |BN gamma| max 0.495 | conv |w| stem 5.40 stage0 4.50 stage1 5.77 stage2 2.98
+BSDIAG e73 | t1 93.18 | running_var min 2.94e-09 max 1.44 (stem_bn) | |running_mean| max 1.1 | |param| max 1.51 | |BN gamma| max 0.499 | conv |w| stem 5.38 stage0 4.48 stage1 5.75 stage2 2.97
+BSDIAG e74 | t1 93.15 | running_var min 2.96e-09 max 1.41 (stem_bn) | |running_mean| max 1.09 | |param| max 1.51 | |BN gamma| max 0.499 | conv |w| stem 5.36 stage0 4.47 stage1 5.73 stage2 2.96
+BSDIAG e75 | t1 93.32 | running_var min 2.91e-09 max 1.42 (stem_bn) | |running_mean| max 1.09 | |param| max 1.51 | |BN gamma| max 0.498 | conv |w| stem 5.34 stage0 4.46 stage1 5.71 stage2 2.95
+BS e75  | t1 93.32 / t5 99.82 | 10s
+BSDIAG e76 | t1 93.40 | running_var min 2.89e-09 max 1.41 (stem_bn) | |running_mean| max 1.08 | |param| max 1.5 | |BN gamma| max 0.499 | conv |w| stem 5.33 stage0 4.45 stage1 5.70 stage2 2.94
+BSDIAG e77 | t1 93.43 | running_var min 2.88e-09 max 1.39 (stem_bn) | |running_mean| max 1.08 | |param| max 1.5 | |BN gamma| max 0.497 | conv |w| stem 5.33 stage0 4.44 stage1 5.69 stage2 2.94
+BSDIAG e78 | t1 93.53 | running_var min 2.92e-09 max 1.4 (stem_bn) | |running_mean| max 1.08 | |param| max 1.5 | |BN gamma| max 0.496 | conv |w| stem 5.32 stage0 4.44 stage1 5.69 stage2 2.94
+BS e78  | t1 93.53 / t5 99.79 | 10s
+BSDIAG e79 | t1 93.52 | running_var min 2.87e-09 max 1.4 (stem_bn) | |running_mean| max 1.08 | |param| max 1.5 | |BN gamma| max 0.496 | conv |w| stem 5.32 stage0 4.44 stage1 5.69 stage2 2.94
+BS e79  | t1 93.52 / t5 99.77 | 10s
+BSDIAG e80 | t1 93.60 | running_var min 2.89e-09 max 1.4 (stem_bn) | |running_mean| max 1.08 | |param| max 1.5 | |BN gamma| max 0.496 | conv |w| stem 5.32 stage0 4.44 stage1 5.69 stage2 2.94
+BS e80  | t1 93.60 / t5 99.79 | 10s
+BS best t1 93.60 (e80) -> saved /tmp/claude-1008/-home-ryan/724bb58d-4782-4c02-9f63-01557aa1984b/scratchpad/floatdiag_c10_s0.pt
+BS DONE

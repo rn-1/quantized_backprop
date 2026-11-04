@@ -23,8 +23,17 @@ RECIPE="QC_K=5 QC_DIVRING=1 QC_PRESHIFT=2 QC_FXOPT=1 QC_FW=20 QC_FV=16 QC_BNF=16
 | `QC_SEED` | init and data-order seed; must match the snapshot's seed |
 | `QC_SAVE` | path to save the final model |
 | `QC_SITE`, `QC_EPOCHS` | per-site payload logging threshold (log2); stop early |
+| `QC_CKPT`, `QC_RESUME` | save a full resume checkpoint after every epoch; restart from it (bit-identical, tested) |
+| `QC_DEV`, `QC_SMOKE` | test only: run on `cpu`; keep only the first n train/test batches |
 
 Newton refinement (`RECIP_NEWTON`, `ISQRT_NEWTON`) is on by default.
+
+**Interrupted runs (shared GPUs).** Launch with `QC_CKPT=checkpoints/ck_<name>.pt`. If the process is killed,
+rerun the identical command with `QC_RESUME=1` added, appending to the same log (`>>`). The run asserts that its
+configuration matches the checkpoint, and continues from the next epoch. A CPU test (3 epochs vs 1 + resume 2) gave
+bitwise-identical final weights and buffers.
+
+**Shared machine.** Keep CPU jobs small: `OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 nice -n 19`.
 
 ## 1. Float baselines (shared references, same seed, init and data order)
 ```sh

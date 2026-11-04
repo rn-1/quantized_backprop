@@ -45,6 +45,18 @@ for ep in range(1, EPOCHS+1):
         opt.zero_grad(); l=ce(m(augment_batch(x.to(dev))),tgt); l.backward(); opt.step()
     sch.step()
     t1,t5 = evaluate(m); acc.append((t1,t5))
+    if os.environ.get('BS_DIAG'):   # same quantities as QC_BNDIAG + per-stage mean conv-weight norm (float reference)
+        with torch.no_grad():
+            bns = [(n, b) for n, b in m.named_modules() if isinstance(b, torch.nn.BatchNorm2d)]
+            rv = torch.cat([b.running_var for _, b in bns]); rm = torch.cat([b.running_mean for _, b in bns])
+            worst = max(bns, key=lambda nb: nb[1].running_var.max().item())
+            st = {}
+            for n, p in m.named_parameters():
+                if p.dim() == 4:
+                    k = 'stem' if n.startswith('stem') else 'stage' + n.split('.')[1]; st.setdefault(k, []).append(p.norm().item())
+            log('BSDIAG e%d | t1 %.2f | running_var min %.3g max %.3g (%s) | |running_mean| max %.3g | |param| max %.3g | |BN gamma| max %.3g | conv |w| %s'
+                % (ep, t1, rv.min().item(), rv.max().item(), worst[0], rm.abs().max().item(), max(p.abs().max().item() for p in m.parameters()),
+                   max(b.weight.abs().max().item() for _, b in bns), ' '.join('%s %.2f' % (k, sum(v)/len(v)) for k, v in st.items())))
     if ep%5==0 or ep==1 or ep>=EPOCHS-2:
         log('BS e%-3d | t1 %5.2f / t5 %5.2f | %.0fs' % (ep,t1,t5,time.time()-t0))
 final = {n: p.detach().float().cpu().clone() for n,p in m.named_parameters()}
