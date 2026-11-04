@@ -1,6 +1,6 @@
 # Training a ResNet under MPC with 8 fractional bits in a 35-bit ring
 
-*Status 2026-10-29. Rerun instructions: `REPRODUCE.md`. Full chronological notes, including dead ends:
+*Status 2026-11-04. Rerun instructions: `REPRODUCE.md`. Full chronological notes, including dead ends:
 `BITS_NOTEBOOK.md`; "§N" in code comments refers to that notebook. Logs: `checkpoints/logs/` (`L/`).*
 
 ## 1. Summary
@@ -30,8 +30,8 @@ nothing there.
   ℓ=64 (MP-SPDZ, semi-honest replicated ring). Rounds are unchanged.
 - **An independent implementation agrees:** MP-SPDZ's own fixed-point arithmetic reproduces the
   loss-scaling effect epoch by epoch (§4).
-- **Limits:** it fails at 64×64 resolution (a BatchNorm-backward precision breakdown, §7.1). It also
-  depends on skip connections (§7.2).
+- **Limits:** at 64×64 resolution, stage 0's gradients are too noisy at S=2^16, and a weight-growth runaway
+  collapses training (§7.1; larger S is being tested). It also depends on skip connections (§7.2).
 
 ## 2. Terms
 
@@ -138,36 +138,45 @@ Each fix came from ruling out a bug before blaming precision. Each is free or ne
 
 ## 7. Limits and mechanisms
 
-### 7.1 Higher resolution breaks BatchNorm backward (Tiny-ImageNet; `L/tiny*`, `L/tinydiag_*`)
+### 7.1 Higher resolution: a stage-0 noise → weight-growth runaway (Tiny-ImageNet; `L/tiny*`, `L/loop_probe_*`)
 
-At 64×64 every seed collapses around epoch 11 (at S=2^15, by epoch 3).
-- **It is not an overflow.** A run at ℓ=57, where nothing can wrap, collapses identically.
-- **What happens:** in stage 0 (the 32×32 stage), activation variance runs away (273 → 10^4) for
-  ~10 epochs before the collapse, and the largest weight grows from 1.1 to 5.4.
-- **Mechanism, measured.** A conv feeding BatchNorm is scale-invariant, so its exact gradient is
-  orthogonal to its weights: cos(w, ∇w) = 0. Measured on the epoch-5 checkpoint (`_radial_probe.py`):
+At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2^15.
+- **It is not an overflow.** At ℓ=57, where nothing can wrap, the run collapses identically.
+- **Fixed point causes it; the dataset alone does not.** Seed 0, matched epochs
+  (`L/floatdiag_*`, `L/loop_probe_B*.txt`):
 
-  | | stage 0 | stage 1 | stage 2 |
-  |---|---|---|---|
-  | float64 | 0.000 | 0.000 | 0.000 |
-  | fixed point, Tiny-ImageNet (n = 2^17 per channel in stage 0) | **0.05** | 0.005 | 0.001 |
-  | fixed point, CIFAR-100 (n = 2^15) | 0.006 | 0.001 | 0.001 |
+  | stage 0, epoch | Tiny float | **Tiny fixed** | CIFAR-10 float | CIFAR-10 fixed |
+  |---|---|---|---|---|
+  | conv-weight norm, e1 → e11 | 4.1 → 5.2 | **5.0 → 8.9** | 5.0 → 5.7 | 5.0 → 5.4 |
+  | max pre-BN variance, e1 / e11 | 11 / 6.6 | **273 / 10,100** | 29 / 4.7 | 28 / 8.9 |
+  | gradient cosine vs float64 (fixed) | — | **0.55–0.71** | — | 0.89–0.98 |
+  | BN-input gradient, median grid steps (fixed, e2–e10) | — | 12–27 | — | 41–74 |
 
-  Fixed point breaks BatchNorm's scale invariance where the per-channel count n = batch × H × W is
-  largest. The gradient gains a radial component, and weight and activation scale drift.
-- **The same signature appears at too-small S on CIFAR:** at S=2^7, stage-0 pre-BN activations grow
-  1.4× per step. We read the lower edge of the S window as this breakdown.
-- **Raising S helps only slowly** (stage 0: ≈0.05 at 2^16, ≈0.04 at 2^18, 0.01–0.02 at 2^20).
-- **The obvious BN knobs don't help** (`L/tiny_knob_probe.txt`; the noise level is about ±0.01):
+- **What happens:**
+  - Tiny's stage-0 gradients sit about 2.5–3× (≈1.5 bits) closer to the 2^-8 grid than CIFAR's, and are
+    noisy from epoch 1 (cosine ≈0.6).
+  - Noise in the updates of BN-preceded (scale-invariant) weights inflates their norm, and the pre-BN
+    activations grow.
+  - Larger activations mean a smaller 1/σ, which scales down the gradient flowing back through BN, so
+    more of it rounds away and the noise grows: a feedback loop.
+  - It builds slowly from about epoch 7 and runs away at epochs 10–11. Gradients shrink, the radial
+    component jumps (|cos(w,∇w)| 0.09 → 0.34; it is 0 in float), and BN breaks.
+  - On CIFAR the same stage keeps accurate gradients, so its weight norm tracks float's.
+  - The same runaway signature appears on CIFAR at too-small S (S=2^7: stage-0 pre-BN activations grow
+    1.4× per step).
+- **Knobs tested on the epoch-5/9 checkpoints** (`L/tiny_knob_probe.txt`, `L/tiny_S_probe.txt`):
 
-  | knob | stage-0 radial error | payload |
+  | knob | stage-0 gradient cosine | payload |
   |---|---|---|
-  | K = 0, 3 or 5 | unchanged (0.05–0.06) | K=0 raises it to 2^31.7 |
-  | 1/σ precision of 10, 12 or 16 bits | unchanged | 16 bits → 2^40 |
+  | K = 0, 3, 5; 1/σ at 10–16 bits | no change in the radial error | up to 2^40 (16-bit 1/σ) |
+  | S = 2^16 / 2^17 / 2^18 / 2^19 / 2^20 | 0.71 / 0.72 / 0.77 / 0.82 / **0.88** (e5) | 2^28.5 → **2^32.5** (fits ℓ=35) |
 
-  The error therefore comes from elsewhere. The next suspects are the 2^-8 grid of x_norm and of the
-  gradient inside BN backward.
-- **Status:** the claim holds for CIFAR-resolution BN statistics. Higher resolution needs a fix.
+  - S helps and fits the ring, but stage 0 stays below CIFAR's ≈0.95 even at 2^20, where its gradients
+    are 5–10× larger in grid units than CIFAR's.
+  - So part of the error is S-independent, plausibly forward-pass rounding of activations and weights.
+- **Status:** the claim holds at CIFAR resolution. Whether S=2^19–2^20 prevents the runaway at 64×64 is
+  the next training test (15 epochs, seed 0; it was killed by GPU contention before completing an epoch).
+  If S only delays it, the target becomes the S-independent forward error in stage 0.
 
 ### 7.2 Skip connections are load-bearing (`_ablation_probe.py`, `L/ablation_probe.txt`, `L/plain555_s0.txt`)
 
@@ -216,5 +225,6 @@ These should be disclosed in a methods section.
 
 ## 11. Open items
 
-1. A BatchNorm-backward fix for high resolution. K and 1/σ precision are ruled out; next, test higher precision for x_norm and the gradient inside BN backward (a code change), then a short training test.
+1. **Tiny-ImageNet at S=2^19 and 2^20** (seed 0, 15 epochs; resumable with `QC_CKPT`, see `REPRODUCE.md`). If either
+   holds past epoch 12, run 3 seeds × 40 epochs. If not, target the S-independent forward error in stage 0.
 2. Optional: a second architecture family; a malicious-security cost measurement.
