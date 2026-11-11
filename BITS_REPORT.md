@@ -21,6 +21,7 @@ small gradients stay above the fixed-point grid. It costs no secure operations.
 | CIFAR-10, S=2^17 | 93.45 ± 0.16 | 93.21 ± 0.07 | −0.24 ± 0.22 |
 | CIFAR-10, S=2^16 | 93.45 ± 0.16 | 93.20 ± 0.06 | −0.25 ± 0.19 |
 | Tiny-ImageNet (64×64), S=2^16 | 58.11 ± 0.07 | **collapses** | — (§7.1) |
+| Tiny-ImageNet, **S=2^19**, epoch 15 of 40 (1 seed) | 35.93 | 35.63 | −0.30 (§7.1; full run pending) |
 
 Mean ± sd over 3 seeds; every fixed-point run is paired with a float run of the same seed. **Zero ring
 wraparounds** in every CIFAR run at ℓ=35. On CIFAR-10 the gap is already small at 2^16, so 2^17 changes
@@ -30,8 +31,8 @@ nothing there.
   ℓ=64 (MP-SPDZ, semi-honest replicated ring). Rounds are unchanged.
 - **An independent implementation agrees:** MP-SPDZ's own fixed-point arithmetic reproduces the
   loss-scaling effect epoch by epoch (§4).
-- **Limits:** at 64×64 resolution, stage 0's gradients are too noisy at S=2^16, and a weight-growth runaway
-  collapses training (§7.1; larger S is being tested). It also depends on skip connections (§7.2).
+- **Limits:** S must grow with resolution. At 64×64, S=2^16 collapses through a stage-0 weight-growth runaway,
+  while S=2^19 trains normally (§7.1). The method also depends on skip connections (§7.2).
 
 ## 2. Terms
 
@@ -138,7 +139,7 @@ Each fix came from ruling out a bug before blaming precision. Each is free or ne
 
 ## 7. Limits and mechanisms
 
-### 7.1 Higher resolution: a stage-0 noise → weight-growth runaway (Tiny-ImageNet; `L/tiny*`, `L/loop_probe_*`)
+### 7.1 Higher resolution needs a larger S: a stage-0 noise → weight-growth runaway (Tiny-ImageNet; `L/tiny*`, `L/loop_probe_*`)
 
 At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2^15.
 - **It is not an overflow.** At ℓ=57, where nothing can wrap, the run collapses identically.
@@ -174,9 +175,24 @@ At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2
   - S helps and fits the ring, but stage 0 stays below CIFAR's ≈0.95 even at 2^20, where its gradients
     are 5–10× larger in grid units than CIFAR's.
   - So part of the error is S-independent, plausibly forward-pass rounding of activations and weights.
-- **Status:** the claim holds at CIFAR resolution. Whether S=2^19–2^20 prevents the runaway at 64×64 is
-  the next training test (15 epochs, seed 0; it was killed by GPU contention before completing an epoch).
-  If S only delays it, the target becomes the S-independent forward error in stage 0.
+- **Training test: larger S prevents the runaway** (seed 0, 15 of 40 epochs; `L/tinyS19_s0.txt`,
+  `L/tinyS20_s0.txt`):
+
+  | epoch | float | S=2^16 | **S=2^19** | S=2^20 | max pre-BN variance, 2^16 / 2^19 / 2^20 | max \|w\|, 2^16 / 2^19 |
+  |---|---|---|---|---|---|---|
+  | 5 | 20.94 | 15.60 | 21.21 | 22.53 | 62 / 5.7 / 11 | 1.69 / 1.27 |
+  | 10 | 31.87 | 1.73 | 29.74 | 32.22 | 1,140 / 8.0 / 7.5 | 3.61 / 1.21 |
+  | 12 | 30.54 | collapsed | 29.70 | 32.02 | 59,300 / 8.7 / 7.8 | 16,400 / 1.18 |
+  | 15 | 35.93 | — | **35.63** | 37.08 | — / 7.6 / 6.6 | — / 1.18 |
+
+  - At 2^19 and 2^20, stage-0 variance stays at float's level (5–11), weights stay flat, and accuracy
+    tracks float.
+  - **Payload decides between them.** The peak is 2^32.3 at 2^19 (1.7 bits of headroom at ℓ=35), and
+    2^33.7 at 2^20 (0.3 bits, too tight). **S=2^19 is the Tiny-ImageNet operating point.**
+  - **Reading:** S has to rise with resolution. CIFAR (32×32) works best at 2^17–2^18 and Tiny (64×64)
+    needs 2^19, about +2 bits for 4× the pixels, matching the ≈1.5-bit gradient-size gap measured above.
+    The S-independent part of the stage-0 error does not prevent training.
+- **Status:** a full 40-epoch, 3-seed run at S=2^19 is pending.
 
 ### 7.2 Skip connections are load-bearing (`_ablation_probe.py`, `L/ablation_probe.txt`, `L/plain555_s0.txt`)
 
@@ -225,6 +241,5 @@ These should be disclosed in a methods section.
 
 ## 11. Open items
 
-1. **Tiny-ImageNet at S=2^19 and 2^20** (seed 0, 15 epochs; resumable with `QC_CKPT`, see `REPRODUCE.md`). If either
-   holds past epoch 12, run 3 seeds × 40 epochs. If not, target the S-independent forward error in stage 0.
+1. **Tiny-ImageNet at S=2^19, 3 seeds × 40 epochs** (about 20 h; resumable with `QC_CKPT`). The 15-epoch test passed.
 2. Optional: a second architecture family; a malicious-security cost measurement.
