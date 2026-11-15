@@ -1,6 +1,6 @@
 # Training a ResNet under MPC with 8 fractional bits in a 35-bit ring
 
-*Status 2026-11-14. Rerun instructions: `REPRODUCE.md`. Full chronological notes, including dead ends:
+*Status 2026-11-15. Rerun instructions: `REPRODUCE.md`. Full chronological notes, including dead ends:
 `BITS_NOTEBOOK.md`; "§N" in code comments refers to that notebook. Logs: `checkpoints/logs/` (`L/`).*
 
 ## 1. Summary
@@ -10,9 +10,11 @@ Communication scales with the ring width ℓ, so a smaller ring is cheaper. Secu
 **16 fractional bits in a 64-bit ring**. The one reported attempt at 8 fractional bits diverged
 (Keller & Sun 2022).
 
-**We train with 8 fractional bits in a 35-bit ring and match float accuracy within a fraction of a point.**
+**We train with 8 fractional bits in a 35-bit ring and stay within 0.8 points of float on CIFAR-10,
+CIFAR-100 and Tiny-ImageNet.**
 The enabler is a **static, public loss scale S**. It multiplies the loss by a constant power of two, so
-small gradients stay above the fixed-point grid. It costs no secure operations.
+small gradients stay above the fixed-point grid. It costs no secure operations. S grows with image
+resolution: 2^17 at 32×32, 2^19 at 64×64.
 
 | setting | float | fixed point (f=8, ℓ=35) | gap |
 |---|---|---|---|
@@ -24,17 +26,18 @@ small gradients stay above the fixed-point grid. It costs no secure operations.
 | Tiny-ImageNet, S=2^16 | 58.11 ± 0.07 | collapses | — (§7.1) |
 
 Mean ± sd over 3 seeds; every fixed-point run is paired with a float run of the same seed. **Zero ring
-wraparounds** in every CIFAR and Tiny-ImageNet run at ℓ=35. On CIFAR-10 the gap is already small at 2^16, so 2^17 changes
+wraparounds** in every run above at ℓ=35. On CIFAR-10 the gap is already small at 2^16, so 2^17 changes
 nothing there.
 
 - **Communication:** one real 3-party training step sends **1.61× less data** at ℓ=35 than the usual
   ℓ=64 (MP-SPDZ, semi-honest replicated ring). Rounds are unchanged.
 - **An independent implementation agrees:** MP-SPDZ's own fixed-point arithmetic reproduces the
-  loss-scaling effect epoch by epoch (§4).
-- **BatchNorm is optional, and expensive.** Without it, the same network trains at f=8 within 0.2 points of its own
-  float model, at 2.5× less data and 5.6× fewer rounds per step. It loses ~7.5 points of float accuracy (§7.3).
-- **Limits:** S must grow with resolution. At 64×64, S=2^16 collapses through a stage-0 weight-growth runaway,
-  while S=2^19 trains normally (§7.1). The method also depends on skip connections (§7.2).
+  loss-scaling effect epoch by epoch (§4.2).
+- **BatchNorm is optional, and expensive.** Without it, the same network trains at f=8 within 0.2 points of
+  its own float model, at 2.5× less data and 5.6× fewer rounds per step, but it loses ~7.5 points of float
+  accuracy (§7.3; 1 seed).
+- **Limits:** too small an S collapses training. At 64×64, S=2^16 fails through a weight-growth runaway in the
+  first stage (§7.1). The method also depends on skip connections (§7.2).
 
 ## 2. Terms
 
@@ -49,6 +52,8 @@ nothing there.
 | **A** | softmax elevation: probabilities are carried at 2^-(f+A) so small ones don't round to 0 (A=9) |
 | **K** | bits of BatchNorm-backward's public division by n applied early, to cap the payload (K=5) |
 | **F_W, F_V** | storage precision of master weights (20) and momentum (16); compute uses f=8 |
+| **grid step** | the smallest representable value, 2^-8; "n steps" = n × 2^-8 |
+| **stage 0** | the first group of 5 residual blocks, at the highest resolution (16×16 on CIFAR, 32×32 on Tiny-ImageNet) |
 
 ## 3. Setup
 
@@ -56,6 +61,10 @@ nothing there.
   a small residual MLP head; 8.66M parameters.
 - **Recipe, identical for float and fixed point:** SGD with momentum 0.9, lr 0.1 cosine over 80 epochs,
   weight decay 5e-4, batch 128, flip and crop augmentation.
+- **Datasets:** CIFAR-100 and CIFAR-10 (32×32). Tiny-ImageNet (64×64, 200 classes, labelled val split as
+  test) uses the same recipe over 40 epochs, which is the same number of steps since it has twice the data.
+- **Variant without BatchNorm (§7.3):** the BN layers are removed, and each residual branch's last conv
+  starts at zero, so every block starts as the identity.
 - **Emulation, not a secure run.** `simulate.py` reproduces MPC arithmetic exactly:
   - every multiply is followed by stochastic truncation on the ℓ-bit ring, with wraps simulated;
   - BatchNorm's 1/√var, the softmax exp and reciprocal, and the optimizer are fixed-point protocols.
@@ -123,8 +132,8 @@ One training step, 3 parties, MP-SPDZ `replicated-ring-party.x`, semi-honest.
 
 **Why ℓ=35:** MP-SPDZ itself requires ℓ ≥ 35 for f=8 with its k=16 integer range. Our worst observed
 payload is 2^33.19 (CIFAR, S=2^14) and 2^33.01 (Tiny-ImageNet, S=2^19). Both exceed ℓ=34's limit of 2^33,
-so **ℓ=35 is the minimum** (0.8–1.0 bits of headroom). An earlier draft said ℓ ≥ 34 for 2^33.19, which was wrong. At ℓ=32, 2 of 5 S=2^16 runs wrapped once. Training
-absorbed every wrap, but a wrapped step computes a wrong value, so we do not claim ℓ=32.
+so **ℓ=35 is the minimum** (0.8–1.0 bits of headroom). At ℓ=32, 2 of 5 S=2^16 runs wrapped once.
+Training absorbed every wrap, but a wrapped step computes a wrong value, so we do not claim ℓ=32.
 
 ## 6. What it took
 
@@ -142,9 +151,13 @@ Each fix came from ruling out a bug before blaming precision. Each is free or ne
 
 ## 7. Limits and mechanisms
 
-### 7.1 Higher resolution needs a larger S: a stage-0 noise → weight-growth runaway (Tiny-ImageNet; `L/tiny*`, `L/loop_probe_*`)
+### 7.1 Higher resolution needs a larger S (Tiny-ImageNet; `L/tiny*`, `L/loop_probe_*`)
 
-At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2^15.
+**Result.** At 64×64, S=2^16 collapses every seed around epoch 11 (S=2^15: by epoch 3). **S=2^19 trains
+normally: 57.34 ± 0.14 vs float 58.11 ± 0.07, a gap of −0.78 ± 0.18** (3 seeds × 40 epochs,
+`L/tinyfull_S19_s*.txt`), with zero wraps. The worst peak is 2^33.01 (seed 0, e31), 0.99 bits under ℓ=35's
+limit. The rest of this section explains the failure at 2^16 and how S=2^19 was chosen.
+
 - **It is not an overflow.** At ℓ=57, where nothing can wrap, the run collapses identically.
 - **Fixed point causes it; the dataset alone does not.** Seed 0, matched epochs
   (`L/floatdiag_*`, `L/loop_probe_B*.txt`):
@@ -195,10 +208,6 @@ At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2
   - **Reading:** S has to rise with resolution. CIFAR (32×32) works best at 2^17–2^18 and Tiny (64×64)
     needs 2^19, about +2 bits for 4× the pixels, matching the ≈1.5-bit gradient-size gap measured above.
     The S-independent part of the stage-0 error does not prevent training.
-- **Full result at S=2^19** (3 seeds × 40 epochs; `L/tinyfull_S19_s*.txt`): **57.34 ± 0.14 vs float 58.11 ± 0.07,
-  gap −0.78 ± 0.18**, matching CIFAR-100's gap at S=2^16. Zero wraps.
-  - The worst peak is 2^33.01 (seed 0, e31): 0.99 bits under ℓ=35's limit. It is higher than in the 15-epoch
-    test (2^32.34), so longer runs show a higher tail.
 
 ### 7.2 Skip connections are load-bearing (`_ablation_probe.py`, `L/ablation_probe.txt`, `L/plain555_s0.txt`)
 
@@ -237,7 +246,7 @@ with zero-initialised residual branches; per conv layer at each snapshot):
 The window is the payload limit minus the S the most demanding layer needs to put its median gradient at
 16 grid steps.
 
-- **The hypothesis holds for the forward pass and fails for the backward.**
+- **Does BN keep the scales uniform enough for one S? In the forward pass yes, in the backward pass no.**
   - BN keeps forward activations uniform: a 2–5-bit spread against 7–9 without it. Forward values are
     not scaled by S, so this is the part S cannot fix. Without BN, some layers' median activations sit at
     0.7–2 grid steps, i.e. mostly rounded away in the forward pass.
@@ -295,8 +304,10 @@ These should be disclosed in a methods section.
 2. **BN running statistics on the 2^-8 grid** (fixed; see §6).
 3. **The late-training collapse attributed to precision** was the biased reciprocal (fixed; see §6).
 4. **Headroom figures stated during analysis** (3.8 and 2.77 bits) were wrong; the table in §4.1 is
-   correct.
+   correct. A draft also said a 2^33.19 payload needs ℓ ≥ 34; ℓ=34's limit is 2^33, so it needs ℓ=35.
 
 ## 11. Open items
 
-1. Optional: a second architecture family; a malicious-security cost measurement.
+1. The no-BatchNorm result is a single seed; 2 more seeds would make it citable (about 6 h each).
+2. Optional: a second architecture family; a malicious-security cost measurement; resolutions above 64×64
+   (to test how S scales).
