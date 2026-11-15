@@ -1,0 +1,21 @@
+NP BN   e0  | 33/33 layers active | grad spread 6.8 bits, fwd spread 1.9 bits (medians 50.5..186 steps) | log2 S needed (T=16): worst 18.0 (stages.0.4.conv1), median 15.4 | S_max(l=35)=2^20 | window T=8/16/32: 3.0/2.0/1.0
+NP        payload by S: 2^10:2^23.6 2^12:2^24.9 2^14:2^27.3 2^16:2^29.0 2^18:2^31.0 2^20:2^32.8 2^22:2^35.0 2^24:2^37.1
+NP BN   e1  | 33/33 layers active | grad spread 7.2 bits, fwd spread 2.4 bits (medians 63.2..331 steps) | log2 S needed (T=16): worst 22.5 (stages.0.3.conv1), median 18.4 | S_max(l=35)=2^22 | window T=8/16/32: 0.5/-0.5/-1.5
+NP        payload by S: 2^10:2^24.1 2^12:2^24.1 2^14:2^25.9 2^16:2^27.9 2^18:2^29.9 2^20:2^31.9 2^22:2^33.9 2^24:2^35.9
+NP BN   e3  | 33/33 layers active | grad spread 6.7 bits, fwd spread 2.6 bits (medians 48.2..297 steps) | log2 S needed (T=16): worst 21.6 (stages.0.4.conv1), median 17.3 | S_max(l=35)=2^22 | window T=8/16/32: 1.4/0.4/-0.6
+NP        payload by S: 2^10:2^24.4 2^12:2^24.4 2^14:2^25.3 2^16:2^27.3 2^18:2^29.3 2^20:2^31.3 2^22:2^33.3 2^24:2^35.3
+NP BN   e10 | 33/33 layers active | grad spread 6.9 bits, fwd spread 4.3 bits (medians 15.6..301 steps) | log2 S needed (T=16): worst 20.6 (stages.0.4.conv1), median 15.4 | S_max(l=35)=2^22 | window T=8/16/32: 2.4/1.4/0.4
+NP        payload by S: 2^10:2^25.0 2^12:2^25.0 2^14:2^26.0 2^16:2^28.0 2^18:2^30.0 2^20:2^32.0 2^22:2^33.9 2^24:2^36.0
+NP BN   e20 | 33/33 layers active | grad spread 6.6 bits, fwd spread 5.2 bits (medians 8.5..306 steps) | log2 S needed (T=16): worst 20.2 (stages.0.3.conv1), median 15.6 | S_max(l=35)=2^20 | window T=8/16/32: 0.8/-0.2/-1.2
+NP        payload by S: 2^10:2^25.0 2^12:2^25.0 2^14:2^26.5 2^16:2^28.5 2^18:2^30.5 2^20:2^32.5 2^22:2^34.5 2^24:2^36.5
+NP noBN e0  | 3/33 layers active | grad spread 1.6 bits, fwd spread 2.6 bits (medians 11.6..69 steps) | log2 S needed (T=16): worst 15.5 (stem_conv), median 14.7 | S_max(l=35)=2^24 | window T=8/16/32: 9.5/8.5/7.5
+NP        payload by S: 2^10:2^23.5 2^12:2^23.5 2^14:2^23.5 2^16:2^23.5 2^18:2^24.6 2^20:2^26.6 2^22:2^28.6 2^24:2^30.6
+NP noBN e1  | 33/33 layers active | grad spread 4.0 bits, fwd spread 7.2 bits (medians 0.7..100 steps) | log2 S needed (T=16): worst 16.4 (stages.0.4.conv1), median 14.0 | S_max(l=35)=2^22 | window T=8/16/32: 6.6/5.6/4.6
+NP        payload by S: 2^10:2^24.1 2^12:2^24.1 2^14:2^25.9 2^16:2^27.9 2^18:2^29.9 2^20:2^31.9 2^22:2^33.9 2^24:2^35.9
+NP noBN e3  | 33/33 layers active | grad spread 3.1 bits, fwd spread 7.5 bits (medians 0.8..144 steps) | log2 S needed (T=16): worst 14.9 (stages.0.1.conv1), median 13.2 | S_max(l=35)=2^22 | window T=8/16/32: 8.1/7.1/6.1
+NP        payload by S: 2^10:2^24.9 2^12:2^24.9 2^14:2^25.7 2^16:2^27.7 2^18:2^29.7 2^20:2^31.7 2^22:2^33.7 2^24:2^35.7
+NP noBN e10 | 31/33 layers active | grad spread 2.4 bits, fwd spread 9.3 bits (medians 0.8..524 steps) | log2 S needed (T=16): worst 13.8 (stages.0.1.conv1), median 13.2 | S_max(l=35)=2^20 | window T=8/16/32: 7.2/6.2/5.2
+NP        payload by S: 2^10:2^25.0 2^12:2^25.0 2^14:2^26.4 2^16:2^28.5 2^18:2^30.5 2^20:2^32.5 2^22:2^34.5 2^24:2^36.5
+NP noBN e20 | 29/33 layers active | grad spread 2.5 bits, fwd spread 8.8 bits (medians 2.0..879 steps) | log2 S needed (T=16): worst 14.1 (stages.1.1.conv2), median 13.5 | S_max(l=35)=2^22 | window T=8/16/32: 8.9/7.9/6.9
+NP        payload by S: 2^10:2^25.0 2^12:2^25.0 2^14:2^25.9 2^16:2^28.0 2^18:2^29.9 2^20:2^32.0 2^22:2^33.9 2^24:2^35.9
+NP DONE -> checkpoints/logs/norm_probe.json

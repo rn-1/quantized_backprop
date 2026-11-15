@@ -1,6 +1,6 @@
 # Training a ResNet under MPC with 8 fractional bits in a 35-bit ring
 
-*Status 2026-11-04. Rerun instructions: `REPRODUCE.md`. Full chronological notes, including dead ends:
+*Status 2026-11-14. Rerun instructions: `REPRODUCE.md`. Full chronological notes, including dead ends:
 `BITS_NOTEBOOK.md`; "§N" in code comments refers to that notebook. Logs: `checkpoints/logs/` (`L/`).*
 
 ## 1. Summary
@@ -20,17 +20,19 @@ small gradients stay above the fixed-point grid. It costs no secure operations.
 | CIFAR-100, S=2^16 | 71.79 ± 0.16 | 70.95 ± 0.03 | −0.84 ± 0.13 |
 | CIFAR-10, S=2^17 | 93.45 ± 0.16 | 93.21 ± 0.07 | −0.24 ± 0.22 |
 | CIFAR-10, S=2^16 | 93.45 ± 0.16 | 93.20 ± 0.06 | −0.25 ± 0.19 |
-| Tiny-ImageNet (64×64), S=2^16 | 58.11 ± 0.07 | **collapses** | — (§7.1) |
-| Tiny-ImageNet, **S=2^19**, epoch 15 of 40 (1 seed) | 35.93 | 35.63 | −0.30 (§7.1; full run pending) |
+| Tiny-ImageNet (64×64), **S=2^19** | 58.11 ± 0.07 | **57.34 ± 0.14** | **−0.78 ± 0.18** |
+| Tiny-ImageNet, S=2^16 | 58.11 ± 0.07 | collapses | — (§7.1) |
 
 Mean ± sd over 3 seeds; every fixed-point run is paired with a float run of the same seed. **Zero ring
-wraparounds** in every CIFAR run at ℓ=35. On CIFAR-10 the gap is already small at 2^16, so 2^17 changes
+wraparounds** in every CIFAR and Tiny-ImageNet run at ℓ=35. On CIFAR-10 the gap is already small at 2^16, so 2^17 changes
 nothing there.
 
 - **Communication:** one real 3-party training step sends **1.61× less data** at ℓ=35 than the usual
   ℓ=64 (MP-SPDZ, semi-honest replicated ring). Rounds are unchanged.
 - **An independent implementation agrees:** MP-SPDZ's own fixed-point arithmetic reproduces the
   loss-scaling effect epoch by epoch (§4).
+- **BatchNorm is optional, and expensive.** Without it, the same network trains at f=8 within 0.2 points of its own
+  float model, at 2.5× less data and 5.6× fewer rounds per step. It loses ~7.5 points of float accuracy (§7.3).
 - **Limits:** S must grow with resolution. At 64×64, S=2^16 collapses through a stage-0 weight-growth runaway,
   while S=2^19 trains normally (§7.1). The method also depends on skip connections (§7.2).
 
@@ -120,7 +122,8 @@ One training step, 3 parties, MP-SPDZ `replicated-ring-party.x`, semi-honest.
 - Storing BN statistics at 2^-16 changes the cost by −0.09 MB per step.
 
 **Why ℓ=35:** MP-SPDZ itself requires ℓ ≥ 35 for f=8 with its k=16 integer range. Our worst observed
-payload in any CIFAR run is 2^33.19, which needs ℓ ≥ 34. At ℓ=32, 2 of 5 S=2^16 runs wrapped once. Training
+payload is 2^33.19 (CIFAR, S=2^14) and 2^33.01 (Tiny-ImageNet, S=2^19). Both exceed ℓ=34's limit of 2^33,
+so **ℓ=35 is the minimum** (0.8–1.0 bits of headroom). An earlier draft said ℓ ≥ 34 for 2^33.19, which was wrong. At ℓ=32, 2 of 5 S=2^16 runs wrapped once. Training
 absorbed every wrap, but a wrapped step computes a wrong value, so we do not claim ℓ=32.
 
 ## 6. What it took
@@ -192,7 +195,10 @@ At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2
   - **Reading:** S has to rise with resolution. CIFAR (32×32) works best at 2^17–2^18 and Tiny (64×64)
     needs 2^19, about +2 bits for 4× the pixels, matching the ≈1.5-bit gradient-size gap measured above.
     The S-independent part of the stage-0 error does not prevent training.
-- **Status:** a full 40-epoch, 3-seed run at S=2^19 is pending.
+- **Full result at S=2^19** (3 seeds × 40 epochs; `L/tinyfull_S19_s*.txt`): **57.34 ± 0.14 vs float 58.11 ± 0.07,
+  gap −0.78 ± 0.18**, matching CIFAR-100's gap at S=2^16. Zero wraps.
+  - The worst peak is 2^33.01 (seed 0, e31): 0.99 bits under ℓ=35's limit. It is higher than in the 15-epoch
+    test (2^32.34), so longer runs show a higher tail.
 
 ### 7.2 Skip connections are load-bearing (`_ablation_probe.py`, `L/ablation_probe.txt`, `L/plain555_s0.txt`)
 
@@ -206,6 +212,57 @@ At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2
 - **Depth costs S even with skips:** first-block gradients roughly halve from [2,2,2] to [5,5,5] to
   [9,9,9]. Deeper networks will need a larger S.
 
+### 7.3 BatchNorm: most of the MPC cost, and not required for S (`L/mpspdz/compile_step_*nonorm*`, `L/norm_probe.txt`)
+
+**Cost.** MP-SPDZ's compiler estimate for one training step, with vs without BatchNorm (the matmuls, the
+ReLU comparisons and the multiplication count are unchanged; 33 BN layers removed):
+
+| network, ring | with BN | without BN | reduction |
+|---|---|---|---|
+| [5,5,5], ℓ=35 f=8 | 21.08 GB · 3.99M rounds · 507M truncations | **8.29 GB · 0.71M rounds · 144M truncations** | **2.5× data, 5.6× rounds** |
+| [5,5,5], ℓ=64 f=16 | 34.06 GB · 4.02M rounds | 13.70 GB · 0.77M rounds | 2.5× · 5.2× |
+
+BatchNorm is about 70% of all truncations and about 80% of the rounds of a training step. The saving
+stacks with the ring-width saving: ℓ=64 with BN → ℓ=35 without BN is 4.1× less data. MP-SPDZ's BN may
+not be optimal (its iterative 1/√var drives the rounds), but the per-element truncations are inherent.
+
+**What BN does for the scales** (`_norm_probe.py`; [5,5,5] float-trained with and without BN, the latter
+with zero-initialised residual branches; per conv layer at each snapshot):
+
+| network, epoch | backward gradient spread across layers | forward activation spread | smallest layer's median activation | window at ℓ=35 (T=16) |
+|---|---|---|---|---|
+| BN, e1 / e10 / e20 | 7.2 / 6.9 / 6.6 bits | 2.4 / 4.3 / 5.2 bits | 63 / 16 / 8.5 steps | −0.5 / 1.4 / −0.2 bits |
+| no BN, e1 / e10 / e20 | 4.0 / 2.4 / 2.5 bits | 7.2 / 9.3 / 8.8 bits | **0.7 / 0.8 / 2.0 steps** | 5.6 / 6.2 / 7.9 bits |
+
+The window is the payload limit minus the S the most demanding layer needs to put its median gradient at
+16 grid steps.
+
+- **The hypothesis holds for the forward pass and fails for the backward.**
+  - BN keeps forward activations uniform: a 2–5-bit spread against 7–9 without it. Forward values are
+    not scaled by S, so this is the part S cannot fix. Without BN, some layers' median activations sit at
+    0.7–2 grid steps, i.e. mostly rounded away in the forward pass.
+  - In the backward pass the opposite holds. BN *widens* the gradient spread (about 7 bits vs 2.5–4),
+    with its smallest gradients always at stage-0 BN inputs, the same layers as the Tiny-ImageNet
+    failure (§7.1). Without BN the gradients are more uniform, and the window is wider.
+- **Calibration caveat:** with BN the T=16 window is about zero, yet BN trains well at S=2^16–2^17. The
+  window threshold is conservative, so these windows are comparisons, not predictions.
+- **Float reference without BN:** 64.44 (vs 71.97 with BN; seed 0, same recipe, `L/nobn555_baseline_s0.txt`).
+- **Training without BN at f=8, ℓ=35** (seed 0, 80 epochs; `L/nobn555S*_s0.txt`; float 64.44):
+
+  | S | final top-1 | gap | peak payload | wraps |
+  |---|---|---|---|---|
+  | 2^14 | 1.16 | collapses at e43 (it tracked float to e40: 51.3 vs 53.2) | 2^60.8 after collapse | 34 epochs |
+  | **2^16** | **64.27** | **−0.17** | 2^30.60 | 0 |
+  | 2^18 | 64.15 | −0.29 | 2^32.92 | 0 |
+
+  - **A network without BN trains at f=8 with the same S as with BN.** The friendlier backward pass wins;
+    the forward rounding of small activations does not prevent it.
+  - **Too little S still fails**, here as a late collapse at 2^14 (accuracy slips at e41–42, then the first
+    wrap at e43).
+  - **The trade-off is accuracy in float, not fixed point.** Without BN the float model reaches 64.4
+    instead of 72.0. In MPC it costs 2.5× less data and 5.6× fewer rounds per step (4.1× less data than
+    ℓ=64 with BN). The fixed-point gap stays ≤ 0.3 points either way. Single seed.
+
 ## 8. Not claimed
 
 - **Not the first sub-64-bit secure training:** AriaNN and Falcon used 32-bit rings, on small networks.
@@ -214,7 +271,8 @@ At 64×64, every seed collapses around epoch 11 at S=2^16, and by epoch 3 at S=2
 - **No worst-case guarantee:** headroom is measured, not bounded.
 - **Not secure training end to end:** training is emulated; one step ran under a real protocol,
   semi-honest 3-party only. Malicious security adds bits.
-- **Not general yet:** one architecture family, CIFAR resolution, ResNet with skips.
+- **Not general yet:** one architecture family (ResNet with skips), up to 64×64 resolution, single seed for the
+  no-BatchNorm result.
 
 ## 9. Prior art
 
@@ -241,5 +299,4 @@ These should be disclosed in a methods section.
 
 ## 11. Open items
 
-1. **Tiny-ImageNet at S=2^19, 3 seeds × 40 epochs** (about 20 h; resumable with `QC_CKPT`). The 15-epoch test passed.
-2. Optional: a second architecture family; a malicious-security cost measurement.
+1. Optional: a second architecture family; a malicious-security cost measurement.

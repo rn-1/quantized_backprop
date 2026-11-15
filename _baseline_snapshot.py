@@ -15,6 +15,7 @@ DATASET = os.environ.get('DATASET', 'cifar100'); simulate.set_dataset(DATASET)  
 cache = torch.device('cpu') if DATASET == 'tinyimagenet' else dev
 BLOCKS = [int(c) for c in os.environ.get('BLOCKS', '555')]; simulate.STAGE_BLOCKS = BLOCKS   # §23 ablation
 simulate.RESIDUAL = bool(int(os.environ.get('RESIDUAL', 1)))
+simulate.NORM = bool(int(os.environ.get('NORM', 1)))   # §24: 0 = no BatchNorm (normaliser-free init)
 OUT = sys.argv[1] if len(sys.argv) > 1 else 'baseline_555.pt'
 SEED = int(sys.argv[2]) if len(sys.argv) > 2 else 0   # init + data-order seed; quant runs pair by seed
 
@@ -37,7 +38,7 @@ torch.manual_seed(SEED)
 m = CNNModelBaseline().to(dev)
 opt = torch.optim.SGD(m.parameters(), lr=LR, momentum=MOM, weight_decay=WD)
 sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=EPOCHS)
-log('BS baseline %s%s %s %.2fM  aug lr=%g cosine %d ep' % (BLOCKS, '' if simulate.RESIDUAL else ' PLAIN(no skips)', DATASET, sum(p.numel() for p in m.parameters())/1e6, LR, EPOCHS))
+log('BS baseline %s%s %s %.2fM  aug lr=%g cosine %d ep' % (BLOCKS, ('' if simulate.RESIDUAL else ' PLAIN(no skips)') + ('' if simulate.NORM else ' NO-BN'), DATASET, sum(p.numel() for p in m.parameters())/1e6, LR, EPOCHS))
 acc = []
 for ep in range(1, EPOCHS+1):
     t0=time.time(); m.train()
@@ -60,6 +61,6 @@ for ep in range(1, EPOCHS+1):
     if ep%5==0 or ep==1 or ep>=EPOCHS-2:
         log('BS e%-3d | t1 %5.2f / t5 %5.2f | %.0fs' % (ep,t1,t5,time.time()-t0))
 final = {n: p.detach().float().cpu().clone() for n,p in m.named_parameters()}
-torch.save({'acc': acc, 'final_params': final, 'blocks': BLOCKS, 'seed': SEED, 'dataset': DATASET, 'residual': simulate.RESIDUAL}, OUT)
+torch.save({'acc': acc, 'final_params': final, 'blocks': BLOCKS, 'seed': SEED, 'dataset': DATASET, 'residual': simulate.RESIDUAL, 'norm': simulate.NORM}, OUT)
 log('BS best t1 %.2f (e%d) -> saved %s' % (max(a[0] for a in acc), 1+max(range(EPOCHS),key=lambda i:acc[i][0]), OUT))
 log('BS DONE')

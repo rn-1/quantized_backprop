@@ -8,7 +8,7 @@
 |---|---|
 | `Compiler/ml.py` | 4 patches, each marked `LOCAL PATCH` (see below) |
 | `Programs/Source/resnet_train.mpc` | new: trains the `simulate.py` ResNet with MP-SPDZ numerics (§21.5) |
-| `Programs/Source/resnet_step.mpc` | new: one training step, for static cost and the real 3PC run (§21.1–21.2) |
+| `Programs/Source/resnet_step.mpc` | new: one training step, for static cost and the real 3PC run (§21.1–21.2); args `bnf16` (BN stats at 2^-16) and `nonorm` (no BatchNorm, §23) |
 | `Programs/Source/gradcheck.mpc` | new: gradient check of patches 1–2 against torch (§21.4) |
 | `CONFIG.mine` | new: g++ build against a user-space micromamba env; `RING_SIZE` defaults to 35 |
 

@@ -1,6 +1,6 @@
 diff -ruN a/CONFIG.mine b/CONFIG.mine
 --- a/CONFIG.mine	1969-12-31 16:00:00.000000000 -0800
-+++ b/CONFIG.mine	2026-10-26 01:48:43.706659108 -0700
++++ b/CONFIG.mine	2026-11-14 21:18:45.868893462 -0800
 @@ -0,0 +1,9 @@
 +# Local build config (BITS_REPORT §21.2). Libraries come from a user-space micromamba env, since no sudo:
 +#   micromamba create -n mpspdz -c conda-forge libsodium gmp libboost-devel openssl yasm
@@ -12,8 +12,8 @@ diff -ruN a/CONFIG.mine b/CONFIG.mine
 +CXX = g++
 +MY_CFLAGS += -Wno-error
 diff -ruN a/Compiler/ml.py b/Compiler/ml.py
---- a/Compiler/ml.py	2026-10-26 01:48:43.690659094 -0700
-+++ b/Compiler/ml.py	2026-10-26 01:48:43.694659097 -0700
+--- a/Compiler/ml.py	2026-11-14 21:18:45.848893611 -0800
++++ b/Compiler/ml.py	2026-11-14 21:18:45.856893551 -0800
 @@ -249,6 +249,11 @@
          self.alloc()
          return super(Tensor, self).randomize(*args, **kwargs)
@@ -181,7 +181,7 @@ diff -ruN a/Compiler/ml.py b/Compiler/ml.py
                  else:
 diff -ruN a/Programs/Source/gradcheck.mpc b/Programs/Source/gradcheck.mpc
 --- a/Programs/Source/gradcheck.mpc	1969-12-31 16:00:00.000000000 -0800
-+++ b/Programs/Source/gradcheck.mpc	2026-10-26 01:48:43.702659104 -0700
++++ b/Programs/Source/gradcheck.mpc	2026-11-14 21:18:45.864893492 -0800
 @@ -0,0 +1,76 @@
 +# BITS_REPORT §21.4 (check 3a): numerical check of the two local ml.py patches. One forward+backward in
 +# the emulator with torch's weights loaded (input_via=0); reveal every parameter gradient. The torch
@@ -261,8 +261,8 @@ diff -ruN a/Programs/Source/gradcheck.mpc b/Programs/Source/gradcheck.mpc
 +        print_ln('GRAD %s %s %s %s', i, type(l).__name__, j, g.get_vector().reveal())
 diff -ruN a/Programs/Source/resnet_step.mpc b/Programs/Source/resnet_step.mpc
 --- a/Programs/Source/resnet_step.mpc	1969-12-31 16:00:00.000000000 -0800
-+++ b/Programs/Source/resnet_step.mpc	2026-10-26 01:48:43.698659100 -0700
-@@ -0,0 +1,43 @@
++++ b/Programs/Source/resnet_step.mpc	2026-11-14 21:18:45.860893522 -0800
+@@ -0,0 +1,44 @@
 +# MP-SPDZ cross-check (BITS_REPORT §21): ONE secure training step of the exact simulate.py ResNet
 +# (CIFAR-100, batch 128, residual BasicBlocks, BN, GAP, residual MLP head) for static cost analysis and
 +# a real local 3-party run. Values are dummy (cost is data-independent).
@@ -285,6 +285,7 @@ diff -ruN a/Programs/Source/resnet_step.mpc b/Programs/Source/resnet_step.mpc
 +simulate.STAGE_BLOCKS = blocks; simulate.GLOBAL_AVG_POOL = True
 +for a in program.args:                      # 'bnf16': BN running stats at 2^-16 (BITS_REPORT §21.6)
 +    if a.startswith('bnf'): ml.BN_STATS_F = int(a[3:])
++simulate.NORM = 'nonorm' not in program.args   # 'nonorm': no BatchNorm layers (BITS_NOTEBOOK §23 overhead study)
 +
 +class Export(simulate.CNNModelBaseline):
 +    # identical to the simulator's float baseline; GAP via AdaptiveAvgPool2d so torch.fx sees a module
@@ -308,7 +309,7 @@ diff -ruN a/Programs/Source/resnet_step.mpc b/Programs/Source/resnet_step.mpc
 +optimizer.fit(samples, labels, epochs=1, batch_size=B, program=program, print_accuracy=False)
 diff -ruN a/Programs/Source/resnet_train.mpc b/Programs/Source/resnet_train.mpc
 --- a/Programs/Source/resnet_train.mpc	1969-12-31 16:00:00.000000000 -0800
-+++ b/Programs/Source/resnet_train.mpc	2026-10-26 01:48:43.694659097 -0700
++++ b/Programs/Source/resnet_train.mpc	2026-11-14 21:18:45.860893522 -0800
 @@ -0,0 +1,53 @@
 +# BITS_REPORT §21.5 (check 3b): train the simulator's ResNet with MP-SPDZ's OWN fixed-point numerics (its
 +# softmax, BN, probabilistic truncation, SGD) in the emulator, to test the central claim independently:

@@ -1116,6 +1116,12 @@ def set_dataset(name):
 # cannot silently change an existing model. False = plain network: no identity add, no projection shortcut
 # (the stride/width change is carried by conv1 alone), and no residual add in the MLP head.
 RESIDUAL = True
+# BatchNorm on/off (§23 overhead study). Read at construction. False = no BN modules at all (not Identity, which
+# MP-SPDZ's torch importer does not support); _bn() passes the input through. Training a deep net without
+# normalisation needs a normaliser-free init: with NORM=False each BasicBlock's conv2 starts at zero (no MPC cost).
+NORM = True
+def _bn(mod, x):
+    return x if mod is None else mod(x)
 
 
 # ---- fixed-point layer wrappers: torch-matching parameter names, compute via the Q autograd fns ----
@@ -1163,6 +1169,12 @@ class QLinear(nn.Module):
 
 def _factory(q):
     # return (Conv, BN, Lin) constructors with a uniform signature, float64+Q or float32+torch.
+    if not NORM:
+        Conv, _, Lin = _factory_norm(q)
+        return Conv, (lambda c: None), Lin
+    return _factory_norm(q)
+
+def _factory_norm(q):
     if q:
         Conv = lambda ci, co, k, s, p, b: QConv2d(ci, co, k, s, p, b)
         BN   = lambda c: QBatchNorm2d(c)
@@ -1185,6 +1197,8 @@ class BasicBlock(nn.Module):
         self.bn2   = BN(cout)
         self.relu  = nn.ReLU()
         self.residual = RESIDUAL
+        if not NORM and RESIDUAL:   # normaliser-free init (SkipInit/Fixup idea): branch starts at 0, block = identity
+            with torch.no_grad(): self.conv2.weight.zero_()
         self.has_down = (stride != 1 or cin != cout) and self.residual
         if self.has_down:                                        # projection shortcut on shape change
             self.down_conv = Conv(cin, cout, 1, stride, 0, False)
@@ -1192,12 +1206,12 @@ class BasicBlock(nn.Module):
 
     def forward(self, x):
         identity = x
-        out = self.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
+        out = self.relu(_bn(self.bn1, self.conv1(x)))
+        out = _bn(self.bn2, self.conv2(out))
         if not self.residual:
             return self.relu(out)                               # plain block (§23 ablation)
         if self.has_down:
-            identity = self.down_bn(self.down_conv(x))
+            identity = _bn(self.down_bn, self.down_conv(x))
         return self.relu(out + identity)                        # residual add (ring add: exact/free)
 
 
@@ -1263,7 +1277,7 @@ class _ResNet(nn.Module):
         return x.mean(dim=(2, 3))
 
     def forward(self, x):
-        x = self.relu(self.stem_bn(self.stem_conv(x)))
+        x = self.relu(_bn(self.stem_bn, self.stem_conv(x)))
         for stage in self.stages:
             for block in stage:
                 x = block(x)

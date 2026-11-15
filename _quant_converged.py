@@ -66,12 +66,13 @@ cache = torch.device('cpu') if DATASET == 'tinyimagenet' else dev
 # §23 ablation knobs: BLOCKS (e.g. 555, 999) and RESIDUAL (1 = skip connections, 0 = plain network)
 BLOCKS = [int(c) for c in os.environ.get('BLOCKS', '555')]; simulate.STAGE_BLOCKS = BLOCKS
 simulate.RESIDUAL = bool(int(os.environ.get('RESIDUAL', 1)))
+simulate.NORM = bool(int(os.environ.get('NORM', 1)))   # §24: 0 = no BatchNorm (normaliser-free init)
 simulate.BITs = BITS; simulate.B_IV = BITS; simulate.SOFTMAX_EXTRA_BITS = A
 
 def log(s): sys.stderr.write(s + '\n'); sys.stderr.flush()
 snap = torch.load(SNAP); base_acc = snap['acc']; base_final = snap['final_params']
 assert snap.get('seed', 0) == SEED, 'snapshot seed %s != QC_SEED %d' % (snap.get('seed', 0), SEED)
-for k, mine, default in (('dataset', DATASET, 'cifar100'), ('blocks', BLOCKS, [5,5,5]), ('residual', simulate.RESIDUAL, True)):
+for k, mine, default in (('dataset', DATASET, 'cifar100'), ('blocks', BLOCKS, [5,5,5]), ('residual', simulate.RESIDUAL, True), ('norm', simulate.NORM, True)):
     assert snap.get(k, default) == mine, 'snapshot %s %s != this run %s' % (k, snap.get(k, default), mine)
 
 torch.manual_seed(SEED)
@@ -111,7 +112,7 @@ else:
 log('QC SEED=%d RECIP_NEWTON=%d ISQRT_NEWTON=%d BN_EARLY_DIV_BITS=%d RING_BITS=%d DIV_PUBLIC_RING=%d LIN_GRAD_PRESHIFT=%d' % (SEED, simulate.RECIP_NEWTON, simulate.ISQRT_NEWTON, simulate.BN_EARLY_DIV_BITS, simulate.RING_BITS, simulate.DIV_PUBLIC_RING, simulate.LIN_GRAD_PRESHIFT))
 log('QC FXOPT=%d%s BN_STATS_F=%d' % (FXOPT, (' F_W=%d F_V=%d' % (FW, FV)) if FXOPT else '', simulate.BN_STATS_F))
 log('QC BITs=%d S=2^%d A=%d %s%s %s aug lr=%g cosine %d ep  (%.2fM params)'
-    % (BITS, int(math.log2(S)), A, BLOCKS, '' if simulate.RESIDUAL else ' PLAIN(no skips)', DATASET, LR, EPOCHS, sum(p.numel() for p in mq.parameters())/1e6))
+    % (BITS, int(math.log2(S)), A, BLOCKS, ('' if simulate.RESIDUAL else ' PLAIN(no skips)') + ('' if simulate.NORM else ' NO-BN'), DATASET, LR, EPOCHS, sum(p.numel() for p in mq.parameters())/1e6))
 log('QC ep | base t1/t5 | quant t1/t5 | t1 gap | nonfin | sec | payload | batch-stat t1 (old protocol)')
 Sf = float(S)
 # QC_CKPT=<path>: after every epoch, atomically save everything needed to continue: model (incl. BN buffers),
@@ -119,7 +120,7 @@ Sf = float(S)
 # QC_RESUME=1 restarts from it. The data order and init are rebuilt from the seed exactly as in a fresh run, then
 # overwritten, so a resumed run continues bit-identically (verified, see BITS_NOTEBOOK / REPRODUCE).
 CKPT = os.environ.get('QC_CKPT'); start_ep = 1
-CFG = dict(BITS=BITS, LOGS=LOGS, A=A, SEED=SEED, DATASET=DATASET, BLOCKS=BLOCKS, RESIDUAL=simulate.RESIDUAL, EPOCHS=EPOCHS,
+CFG = dict(BITS=BITS, LOGS=LOGS, A=A, SEED=SEED, DATASET=DATASET, BLOCKS=BLOCKS, RESIDUAL=simulate.RESIDUAL, NORM=simulate.NORM, EPOCHS=EPOCHS,
            FXOPT=FXOPT, RING=simulate.RING_BITS, K=simulate.BN_EARLY_DIV_BITS, BNF=simulate.BN_STATS_F)
 if os.environ.get('QC_RESUME') and CKPT and os.path.exists(CKPT):
     ck = torch.load(CKPT, weights_only=False)
@@ -158,7 +159,7 @@ for ep in range(start_ep, EPOCHS+1):
         % (ep, b1,b5, q1,q5, q1-b1, nonfin, time.time()-t0, math.log2(P) if P > 0 else 0,
            ' OVF' if P >= 2**(simulate.RING_BITS-1) else '', qb1))
     if SITE_THR is not None: _ep_report(ep)
-    if os.environ.get('QC_BNDIAG'):   # §22: BN running-stat ranges + weight magnitudes (no RNG consumed)
+    if os.environ.get('QC_BNDIAG') and simulate.NORM:   # §22: BN running-stat ranges + weight magnitudes (no RNG consumed)
         with torch.no_grad():
             bns = [(n, b) for n, b in mq.named_modules() if isinstance(b, simulate.QBatchNorm2d)]
             rv = torch.cat([b.running_var for _, b in bns]); rm = torch.cat([b.running_mean for _, b in bns])
